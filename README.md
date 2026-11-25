@@ -118,13 +118,14 @@ Flows live in [`app/src/main/assets/flows.json`](app/src/main/assets/flows.json)
 | `input` | finds the field whose hint, label or view id matches `texts`, then types `number` or `account` with ACTION_SET_TEXT |
 | `press` | taps a Next/OK/Continue button. Buttons in `forbiddenButtons` (Send, Pay, Confirm…) are never pressed |
 | `await_amount` | finishes as soon as the amount field or a PIN screen appears |
+| `back_until` | presses Back (max 4×) until an item exactly matching `texts` is on screen |
 | `"optional": true` | skipped if the next step already matches the screen, or if the step never appears |
 
 Matching ignores case, punctuation and leading menu numbers ("2. Send Money" matches `"send money"`). An exact match wins over a partial one. `{SIM}` is replaced with the SIM slot from Settings.
 
 **Tuning steps:**
 
-1. Open **Settings** and tap the **"ScanPesa 1.2.0"** line at the bottom 7 times. Debug options appear.
+1. Open **Settings** and tap the **"ScanPesa 1.3.0"** line at the bottom 7 times. Debug options appear.
 2. Turn on **Debug mode**.
 3. Open the M-PESA app, SIM Toolkit or One App yourself and go through the menus by hand.
 4. Each screen is dumped as lines like:
@@ -146,6 +147,41 @@ Matching ignores case, punctuation and leading menu numbers ("2. Send Money" mat
 Per-target options: `clearTask` (restart the app at its home screen; true for SIM Toolkit, false for the M-PESA app and One App so you stay logged in) and `loginWaitSeconds` (45 for the M-PESA app and One App: time for you to unlock the app. ScanPesa types nothing during it).
 
 Timeouts: `jobTimeoutSeconds` (20) is the whole job, plus the login wait. `stepTimeoutSeconds` (8) is how long one step may wait for its screen. If the M-PESA app shows its login PIN first, ScanPesa waits for you to unlock it (within the 20 seconds) and never touches the PIN field.
+
+
+## Why ScanPesa declares itself an accessibility tool (Samsung SIM Toolkit)
+
+Samsung's SIM Toolkit (and other Android 14+ apps with sensitive screens) marks its menu as
+*accessibility data sensitive*. Ordinary accessibility services then can't see the menu list,
+and their simulated taps are ignored. Only services that declare `android:isAccessibilityTool="true"`
+get through. ScanPesa declares it, which is what made SIM Toolkit automation work on a Galaxy S22.
+
+- **After installing or updating, switch "ScanPesa auto-fill" OFF and ON again** in Accessibility
+  settings. Android only grants the tool, screenshot and tap abilities when the service is re-enabled.
+- Google Play only allows `isAccessibilityTool` for apps built mainly to help people with
+  disabilities. ScanPesa is fine to sideload, but would need a different approach to be published on Play.
+
+### ScanPesa's "eyes" (fallback)
+
+If a step's text can't be found in the accessibility tree, ScanPesa takes a screenshot through the
+accessibility service, reads it with the on-device ML Kit model and taps the matching text. The top
+20% of the screen (titles) and ScanPesa's own status strip are ignored, and the same safety rules
+apply: it stops if it reads "Amount" or "PIN" and never taps Send/Pay/Confirm. Screenshots are kept
+in memory only.
+
+### Testing flows from a PC over USB
+
+```bash
+adb shell am start -n com.scanpesa.app/.automation.AdbTestActivity --es type SEND_MONEY --es number 0700000000
+adb shell am start -n com.scanpesa.app/.automation.AdbTestActivity --es type PAYBILL --es number 247247 --es account TEST1
+adb logcat -s ScanPesa        # every step, how it was done (tree / text search / eyes), and why it stopped
+```
+Types: `SEND_MONEY`, `POCHI`, `PAYBILL`, `TILL`. The test entry point needs the `DUMP` permission,
+which only the adb shell has, so other apps can't start jobs. Jobs stop at the amount screen as usual.
+Press Back on the phone afterwards.
+
+SIM Toolkit remembers which menu it was last on, so every SIM Toolkit flow starts with a
+`back_until` step. It presses Back (at most 4 times) until the main menu's "M-PESA" item is visible.
 
 ## Safety design
 

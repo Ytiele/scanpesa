@@ -75,6 +75,14 @@ class StatusOverlay(private val service: AccessibilityService, private val onSto
         if (autoHideMs > 0) handler.postDelayed({ hide() }, autoHideMs)
     }
 
+    /** Where the strip is on screen (the eyes ignore text there). */
+    fun bounds(): android.graphics.Rect? {
+        val v = root ?: return null
+        if (v.width == 0) return null
+        val loc = IntArray(2).also { v.getLocationOnScreen(it) }
+        return android.graphics.Rect(loc[0], loc[1], loc[0] + v.width, loc[1] + v.height)
+    }
+
     /** Lets touches fall through the strip for [ms] (so a simulated tap underneath isn't eaten). */
     fun passThrough(ms: Long = 500) {
         val v = root ?: return

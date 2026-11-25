@@ -20,6 +20,8 @@ class AndroidNode(
     private val service: AccessibilityService? = null,
     private val beforeTap: (() -> Unit)? = null,
 ) : UiNode {
+    // Refresh first: the service's node cache can hold stale visibility/text from mid-animation.
+    private val fresh = runCatching { info.refresh() }.getOrDefault(false)
     override val isPassword: Boolean = info.isPassword
 
     override val text: String? get() = if (isPassword) null else info.text?.toString()
@@ -55,19 +57,12 @@ class AndroidNode(
         return tap()
     }
 
-    /** Taps the centre of the node like a finger would. */
+    /** Taps the centre of the node like a finger would (through the service, which logs the result). */
     private fun tap(): Boolean {
-        val svc = service ?: return false
         val r = Rect().also { info.getBoundsInScreen(it) }
         if (r.isEmpty) return false
-        val path = Path().apply { moveTo(r.exactCenterX(), r.exactCenterY()) }
-        val gesture = GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path, 0, 60))
-            .build()
-        beforeTap?.invoke()
-        val ok = svc.dispatchGesture(gesture, null, null)
-        DebugLog.event("  tap ${if (ok) "sent" else "FAILED"} at ${r.centerX()},${r.centerY()}: ${label()}")
-        return ok
+        val svc = service as? ScanPesaAccessibilityService ?: return false
+        return svc.tapAt(r.centerX(), r.centerY())
     }
 
     override fun setText(value: String): Boolean {
@@ -89,6 +84,12 @@ class AndroidNode(
         DebugLog.event("  paste ${if (ok) "ok" else "FAILED"} into field: ${label()}")
         return ok
     }
+
+    override fun findByText(text: String): List<UiNode> = runCatching {
+        info.findAccessibilityNodeInfosByText(text).orEmpty()
+            .filter { !it.isPassword }
+            .map { AndroidNode(it, service, beforeTap) }
+    }.getOrDefault(emptyList())
 
     override fun scrollForward(): Boolean = info.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
 

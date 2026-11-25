@@ -20,10 +20,17 @@ interface UiNode {
     fun click(): Boolean
     fun setText(value: String): Boolean
     fun scrollForward(): Boolean
+
+    /** Fresh, app-side search for nodes containing [text] (case-insensitive). */
+    fun findByText(text: String): List<UiNode> = emptyList()
 }
 
-/** A visible, non-password node plus its nearest clickable self/ancestor. */
-class FlatNode(val node: UiNode, val depth: Int, val clickTarget: UiNode?, val order: Int)
+/**
+ * A non-password node plus its nearest clickable self/ancestor.
+ * [visible] is false when the node (or an ancestor) reports not visible to the user; such nodes
+ * are kept (Samsung reports whole lists as invisible during window animations) but ranked lower.
+ */
+class FlatNode(val node: UiNode, val depth: Int, val clickTarget: UiNode?, val order: Int, val visible: Boolean = true)
 
 /** Snapshot of one screen. Password nodes and their subtrees are never included. */
 class Screen(val nodes: List<FlatNode>, val passwordSeen: Boolean) {
@@ -31,14 +38,14 @@ class Screen(val nodes: List<FlatNode>, val passwordSeen: Boolean) {
         fun of(root: UiNode): Screen {
             val out = ArrayList<FlatNode>()
             var password = false
-            fun walk(n: UiNode, depth: Int, clickable: UiNode?) {
+            fun walk(n: UiNode, depth: Int, clickable: UiNode?, parentVisible: Boolean) {
                 if (n.isPassword) { password = true; return } // never read or descend into PIN fields
-                if (!n.isVisible) return
+                val visible = parentVisible && n.isVisible
                 val target = if (n.isClickable) n else clickable
-                out += FlatNode(n, depth, target, out.size)
-                if (depth < 60) n.children.forEach { walk(it, depth + 1, target) }
+                out += FlatNode(n, depth, target, out.size, visible)
+                if (depth < 60) n.children.forEach { walk(it, depth + 1, target, visible) }
             }
-            walk(root, 0, null)
+            walk(root, 0, null, true)
             return Screen(out, password)
         }
     }

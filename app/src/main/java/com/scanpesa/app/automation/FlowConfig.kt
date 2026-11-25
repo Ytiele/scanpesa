@@ -15,6 +15,11 @@ enum class StepAction {
     PRESS,
     /** Finish: wait until the amount field (or PIN screen) is visible, then hand over to the user. */
     AWAIT_AMOUNT,
+    /**
+     * Press Back (max 4 times) until an item exactly matching [FlowStep.texts] is on screen.
+     * SIM Toolkit remembers its last menu, so flows start with this to get to the main menu.
+     */
+    BACK_UNTIL,
 }
 
 /** Which job value an INPUT step types. Amount and PIN are deliberately not representable. */

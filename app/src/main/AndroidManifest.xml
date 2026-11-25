@@ -40,6 +40,15 @@
             </intent-filter>
         </activity>
 
+        <!-- USB testing only: DUMP is held by the adb shell and the system, not by other apps. -->
+        <activity
+            android:name=".automation.AdbTestActivity"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <service
             android:name=".automation.ScanPesaAccessibilityService"
             android:exported="false"

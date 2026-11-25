@@ -263,6 +263,44 @@ class FlowEngineTest {
         assertEquals(1, row.clicks)
     }
 
+    /** Samsung S22 SIM Toolkit, captured over adb: rows sit in a list reported invisible mid-animation. */
+    @Test fun samsungStkRowsInsideHiddenListAreFound() {
+        val cfg = bundled()
+        val steps = cfg.targets[Target.SIM_TOOLKIT]!!.flows[PaymentType.SEND_MONEY]!!
+        val title = FakeNode(text = "Safaricom", viewId = "com.android.stk:id/title_text")
+        val mpesaText = FakeNode(text = "M-PESA", viewId = "com.android.stk:id/text")
+        val mpesaRow = FakeNode(className = "android.widget.LinearLayout", isClickable = true, children = listOf(mpesaText))
+        val plusRow = FakeNode(className = "android.widget.LinearLayout", isClickable = true,
+            children = listOf(FakeNode(text = "Safaricom+", viewId = "com.android.stk:id/text")))
+        val list = FakeNode(className = "android.widget.ListView", isVisible = false, children = listOf(plusRow, mpesaRow))
+        val root = screen(FakeNode(children = listOf(title)), list, FakeNode(text = "Safaricom"))
+
+        val e = FlowEngine(steps, JobValues("0712345678", null), cfg, 0, mapOf("SIM" to "1"), initialSettleMs = 1500)
+        assertEquals(Outcome.Working, e.tick(root, 1000)) // still settling: nothing touched
+        assertEquals(0, title.clicks + mpesaRow.clicks)
+        e.tick(root, 2000)
+        assertEquals("M-PESA row tapped", 1, mpesaRow.clicks)
+        assertEquals("title never tapped", 0, title.clicks)
+    }
+
+    /** SIM Toolkit reopens where it was left (here: the M-PESA submenu). */
+    @Test fun stkStartsInSubmenuPressesBackFirst() {
+        val cfg = bundled()
+        val steps = cfg.targets[Target.SIM_TOOLKIT]!!.flows[PaymentType.SEND_MONEY]!!
+        var backs = 0
+        val sight = Sight(goBack = { backs++; true })
+        val e = FlowEngine(steps, JobValues("0712345678", null), cfg, 0, mapOf("SIM" to "1"))
+        val lipa = item("Lipa na M-PESA") // contains "M-PESA" but must not count as the main menu
+        val sub = screen(FakeNode(text = "SIM Toolkit", viewId = "com.android.stk:id/title_text"), item("Send Money"), lipa)
+        e.tick(sub, 1000, sight = sight)
+        assertEquals("pressed Back instead of tapping a partial match", 1, backs)
+        assertEquals(0, lipa.clicks)
+        val mpesa = item("M-PESA")
+        e.tick(screen(item("Safaricom+"), mpesa), 2500, sight = sight)
+        assertEquals(1, mpesa.clicks)
+        assertEquals(1, backs)
+    }
+
     @Test fun clickableItemBeatsSameTextTitle() {
         val steps = listOf(FlowStep("Lipa", StepAction.CLICK, listOf("lipa na m-pesa")))
         val title = FakeNode(text = "Lipa na M-PESA") // screen title, not clickable

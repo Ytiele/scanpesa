@@ -17,6 +17,7 @@
       "loginWaitSeconds": 0,
       "flows": {
         "SEND_MONEY": [
+          { "name": "Back to main menu", "action": "back_until", "texts": ["m-pesa", "mpesa"] },
           { "name": "Choose SIM", "action": "click", "texts": ["sim {SIM}", "sim{SIM}", "safaricom"], "optional": true },
           { "name": "M-PESA", "action": "click", "texts": ["m-pesa", "mpesa"] },
           { "name": "Send Money", "action": "click", "texts": ["send money"] },
@@ -26,6 +27,7 @@
           { "name": "Amount screen", "action": "await_amount" }
         ],
         "PAYBILL": [
+          { "name": "Back to main menu", "action": "back_until", "texts": ["m-pesa", "mpesa"] },
           { "name": "Choose SIM", "action": "click", "texts": ["sim {SIM}", "sim{SIM}", "safaricom"], "optional": true },
           { "name": "M-PESA", "action": "click", "texts": ["m-pesa", "mpesa"] },
           { "name": "Lipa na M-PESA", "action": "click", "texts": ["lipa na m-pesa", "lipa na mpesa"] },
@@ -39,6 +41,7 @@
           { "name": "Amount screen", "action": "await_amount" }
         ],
         "TILL": [
+          { "name": "Back to main menu", "action": "back_until", "texts": ["m-pesa", "mpesa"] },
           { "name": "Choose SIM", "action": "click", "texts": ["sim {SIM}", "sim{SIM}", "safaricom"], "optional": true },
           { "name": "M-PESA", "action": "click", "texts": ["m-pesa", "mpesa"] },
           { "name": "Lipa na M-PESA", "action": "click", "texts": ["lipa na m-pesa", "lipa na mpesa"] },
@@ -49,6 +52,7 @@
           { "name": "Amount screen", "action": "await_amount" }
         ],
         "POCHI": [
+          { "name": "Back to main menu", "action": "back_until", "texts": ["m-pesa", "mpesa"] },
           { "name": "Choose SIM", "action": "click", "texts": ["sim {SIM}", "sim{SIM}", "safaricom"], "optional": true },
           { "name": "M-PESA", "action": "click", "texts": ["m-pesa", "mpesa"] },
           { "name": "Lipa na M-PESA", "action": "click", "texts": ["lipa na m-pesa", "lipa na mpesa"] },

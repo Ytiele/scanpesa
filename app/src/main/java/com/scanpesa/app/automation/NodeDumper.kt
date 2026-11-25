@@ -13,6 +13,7 @@ object NodeDumper {
             n.viewId?.takeIf { it.isNotBlank() }?.let { append(" id=").append(it) }
             val flags = listOfNotNull(
                 "click".takeIf { n.isClickable }, "edit".takeIf { n.isEditable }, "scroll".takeIf { n.isScrollable },
+                "hidden".takeIf { !f.visible },
             )
             if (flags.isNotEmpty()) append(" {").append(flags.joinToString(",")).append('}')
         }

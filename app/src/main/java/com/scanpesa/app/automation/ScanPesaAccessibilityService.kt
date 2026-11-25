@@ -1,6 +1,7 @@
 package com.scanpesa.app.automation
 
 import android.accessibilityservice.AccessibilityService
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -34,11 +35,15 @@ class ScanPesaAccessibilityService : AccessibilityService() {
     private var jobPackages: Set<String> = emptySet()
     private var unlockHintShown = false
     private var overlay: StatusOverlay? = null
+    private var eyes: Eyes? = null
+    private var lastEyesLog = 0L
+    private var lastTrace = ""
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         prefs = Prefs(this)
         overlay = StatusOverlay(this) { cancelJob() }
+        eyes = Eyes(this) { overlay?.bounds() }
         instance = this
         _connected.value = true
         refreshWatched()
@@ -67,6 +72,7 @@ class ScanPesaAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         overlay?.hide()
+        eyes?.close()
         if (instance === this) instance = null
         _connected.value = false
         super.onDestroy()
@@ -93,7 +99,9 @@ class ScanPesaAccessibilityService : AccessibilityService() {
 
     /** Root of the active window if it belongs to one of [pkgs], else of any window that does. */
     private fun rootFor(pkgs: Set<String>): AccessibilityNodeInfo? {
-        rootInActiveWindow?.let { if (it.packageName?.toString() in pkgs) return it }
+        // Drop the node cache first: Samsung's SIM Toolkit leaves it stale (empty menu list).
+        if (Build.VERSION.SDK_INT >= 33) runCatching { clearCache() }
+        rootInActiveWindow?.let { if (it.packageName?.toString() in pkgs) { it.refresh(); return it } }
         return runCatching {
             windows.mapNotNull { it.root }.firstOrNull { it.packageName?.toString() in pkgs }
         }.getOrNull()
@@ -116,6 +124,7 @@ class ScanPesaAccessibilityService : AccessibilityService() {
                 steps, JobValues(job.number, job.account), cfg, job.createdAt,
                 placeholders = mapOf("SIM" to prefs.simSlot.toString()),
                 loginWaitMs = loginWait,
+                initialSettleMs = 1500, // Samsung & co. animate the window in; lists report hidden meanwhile
             )
             engineJobId = job.id
             jobPackages = TargetLauncher.packagesFor(this, job.target) + job.packageName
@@ -136,19 +145,66 @@ class ScanPesaAccessibilityService : AccessibilityService() {
                 toast("Unlock ${job.target.label} if asked. ScanPesa will continue.", long = false)
             }
             overlay?.show(e.progress)
-            e.tick(root?.let { AndroidNode(it, this) { overlay?.passThrough() } }, now, why)
+            val trace = e.progress + if (root == null) " | no root: $why" else " | root=${root.packageName} nodes=${root.childCount}"
+            if (trace != lastTrace) { DebugLog.event(trace); lastTrace = trace }
+            e.tick(root?.let { AndroidNode(it, this) { overlay?.passThrough() } }, now, why, sight(e, now, root != null))
         } catch (t: Throwable) {
             Outcome.Failed(e.currentStepName, "Internal error: ${t.javaClass.simpleName}")
         }
-        if (e.currentStepName != before) DebugLog.event("✓ $before")
+        if (e.currentStepName != before) DebugLog.event("✓ $before (${e.lastHow})")
         when (outcome) {
             Outcome.Working -> scheduleTick(400) // keep polling until done/failed/timeout
             else -> finish(job, outcome)
         }
     }
 
+    /**
+     * Extra senses for this tick. The eyes (screenshot + OCR) switch on once a step has waited
+     * 1.2 s without the accessibility tree giving an answer; only screenshots taken after the
+     * last action (+ settle time) are used.
+     */
+    private fun sight(e: FlowEngine, now: Long, haveRoot: Boolean): Sight {
+        val ey = eyes
+        if (haveRoot && ey != null && ey.supported && e.stepAge(now) > 1200) ey.look()
+        val fresh = ey != null && ey.takenAt > e.lastActionAt + 800
+        val lines = if (fresh) ey!!.lines else emptyList()
+        if (fresh && ey!!.takenAt != lastEyesLog) {
+            lastEyesLog = ey.takenAt
+            DebugLog.event("eyes read: " + lines.joinToString(" | ") { it.text }.take(300))
+        }
+        ey?.lastError?.let { if (it != lastTrace) { DebugLog.event("eyes: $it"); lastTrace = it } }
+        val focused = runCatching { findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()
+            ?.takeIf { it.packageName?.toString() in jobPackages && !it.isPassword }
+            ?.let { AndroidNode(it, this) }
+        return Sight(
+            lines = lines,
+            focusedInput = focused,
+            tapAt = { x, y -> tapAt(x, y) },
+            screenHeight = resources.displayMetrics.heightPixels,
+            goBack = { performGlobalAction(GLOBAL_ACTION_BACK).also { DebugLog.event("  pressed Back") } },
+        )
+    }
+
+    /** Taps a screen position like a finger. Logs whether Android completed or cancelled it. */
+    fun tapAt(x: Int, y: Int): Boolean {
+        // Only touch the status strip's window if the tap is under it: changing a window right
+        // before a gesture makes Android cancel the gesture.
+        if (overlay?.bounds()?.contains(x, y) == true) overlay?.passThrough(700)
+        val path = android.graphics.Path().apply { moveTo(x.toFloat(), y.toFloat()) }
+        val g = android.accessibilityservice.GestureDescription.Builder()
+            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 100)).build()
+        val ok = dispatchGesture(g, object : GestureResultCallback() {
+            override fun onCompleted(d: android.accessibilityservice.GestureDescription?) { DebugLog.event("  tap completed at $x,$y") }
+            override fun onCancelled(d: android.accessibilityservice.GestureDescription?) { DebugLog.event("  tap CANCELLED at $x,$y") }
+        }, handler)
+        DebugLog.event("  tap ${if (ok) "sent" else "REFUSED"} at $x,$y")
+        eyes?.forget()
+        return ok
+    }
+
     private fun finish(job: Job, outcome: Outcome) {
         JobStore.clear(job.id)
+        eyes?.forget()
         engine = null
         handler.removeCallbacks(tickRunnable)
         when (outcome) {
@@ -160,6 +216,12 @@ class ScanPesaAccessibilityService : AccessibilityService() {
                 Notifier.show(this, outcome.message, "ScanPesa entered ${describe(job)}. Now type the amount and your PIN yourself.")
             }
             is Outcome.Failed -> {
+                runCatching {
+                    rootFor(jobPackages)?.let { r ->
+                        DebugLog.event("Screen when it stopped:")
+                        NodeDumper.dump(AndroidNode(r)).take(40).forEach { DebugLog.event("  $it") }
+                    } ?: DebugLog.event("Screen when it stopped: not readable (active: ${activePackage()})")
+                }
                 prefs.lastResult = Prefs.LastResult(
                     false, "Stopped at \"${outcome.step}\" (${job.target.label})", outcome.reason, System.currentTimeMillis(),
                 )

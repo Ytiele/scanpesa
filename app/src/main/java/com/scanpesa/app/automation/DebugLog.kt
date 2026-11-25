@@ -19,7 +19,10 @@ object DebugLog {
 
     fun addDump(entry: DumpEntry) = _dumps.update { (listOf(entry) + it).take(MAX_DUMPS) }
 
-    fun event(msg: String) = _events.update { (listOf("${timeStr(System.currentTimeMillis())}  $msg") + it).take(MAX_EVENTS) }
+    fun event(msg: String) {
+        android.util.Log.i("ScanPesa", msg) // visible with: adb logcat -s ScanPesa
+        _events.update { (listOf("${timeStr(System.currentTimeMillis())}  $msg") + it).take(MAX_EVENTS) }
+    }
 
     fun clear() { _dumps.value = emptyList(); _events.value = emptyList() }
 
