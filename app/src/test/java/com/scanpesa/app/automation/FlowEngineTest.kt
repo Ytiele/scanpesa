@@ -172,7 +172,7 @@ class FlowEngineTest {
     @Test fun bundledFlowsJsonParsesAndCoversEveryTargetAndType() {
         val f = listOf(File("src/main/assets/flows.json"), File("app/src/main/assets/flows.json")).first { it.exists() }
         val cfg = FlowConfig.parse(f.readText())
-        assertEquals(20, cfg.jobTimeoutSeconds)
+        assertEquals(40, cfg.jobTimeoutSeconds)
         for (t in Target.entries) {
             val tc = cfg.targets[t]!!
             for (p in PaymentType.entries) {
@@ -252,6 +252,25 @@ class FlowEngineTest {
         val pay = item("Pay"); e.tick(screen(pay), 40_000)
         assertEquals(1, pay.clicks)
         assertTrue(e.tick(screen(), 70_000) is Outcome.Failed) // hard stop: 20 s + 45 s
+    }
+
+    @Test fun nonClickableMenuRowsAreStillTapped() {
+        // Some SIM Toolkit lists don't mark rows clickable: the text node itself must be used.
+        val steps = listOf(FlowStep("M-PESA", StepAction.CLICK, listOf("m-pesa")))
+        val row = FakeNode(text = "M-PESA") // not clickable, no clickable parent
+        val e = FlowEngine(steps, JobValues("0712345678", null), config, 0)
+        e.tick(screen(FakeNode(text = "Safaricom"), row), 1000)
+        assertEquals(1, row.clicks)
+    }
+
+    @Test fun clickableItemBeatsSameTextTitle() {
+        val steps = listOf(FlowStep("Lipa", StepAction.CLICK, listOf("lipa na m-pesa")))
+        val title = FakeNode(text = "Lipa na M-PESA") // screen title, not clickable
+        val itemNode = item("Lipa na M-PESA")
+        val e = FlowEngine(steps, JobValues("1", null), config, 0)
+        e.tick(screen(title, itemNode), 1000)
+        assertEquals(1, itemNode.clicks)
+        assertEquals(0, title.clicks)
     }
 
     @Test fun labelNormalisation() {

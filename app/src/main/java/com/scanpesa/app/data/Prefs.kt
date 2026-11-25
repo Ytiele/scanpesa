@@ -22,7 +22,8 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putString("last_target", v?.name).apply()
 
     /** Target pre-selected on the confirmation screen. */
-    val preferredTarget: Target get() = defaultTarget ?: lastTarget ?: Target.MPESA_APP
+    val preferredTarget: Target
+        get() = (defaultTarget ?: lastTarget)?.takeIf { it.enabled } ?: Target.available.first()
 
     /** 1 or 2: which SIM's toolkit to open. */
     var simSlot: Int

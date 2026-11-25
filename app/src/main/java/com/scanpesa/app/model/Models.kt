@@ -13,12 +13,16 @@ enum class PaymentType(val label: String) {
 }
 
 /** Where ScanPesa takes the user to finish the payment. */
-enum class Target(val label: String, val subtitle: String) {
-    MPESA_APP("M-PESA app", "Safaricom M-PESA app"),
-    SIM_TOOLKIT("SIM Toolkit", "Classic M-PESA menu on the SIM"),
-    ONE_APP("Safaricom One App", "Its M-PESA section");
+enum class Target(val label: String, val subtitle: String, val enabled: Boolean) {
+    // Disabled targets keep their code and flows.json entries; flip `enabled` to bring them back.
+    MPESA_APP("M-PESA app", "Safaricom M-PESA app", enabled = false),
+    SIM_TOOLKIT("SIM Toolkit", "Classic M-PESA menu on the SIM", enabled = true),
+    ONE_APP("Safaricom One App", "Its M-PESA section", enabled = false);
 
     companion object {
+        /** Targets shown in the app. */
+        val available: List<Target> get() = entries.filter { it.enabled }
+
         /** "MY_SAFARICOM" is the old name of ONE_APP (kept so saved settings/history still load). */
         fun fromName(name: String?): Target? =
             if (name == "MY_SAFARICOM") ONE_APP else entries.firstOrNull { it.name == name }

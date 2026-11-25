@@ -179,7 +179,10 @@ private fun ConfirmForm(vm: AppViewModel, d: Draft, showBackToList: Boolean, onB
 
     SectionCard {
         Text("Open in", style = MaterialTheme.typography.titleMedium)
-        Target.entries.forEach { t ->
+        if (Target.available.size == 1) {
+            Text("${target.label} · SIM ${vm.prefs.simSlot}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Text("Change the SIM slot in Settings.", style = MaterialTheme.typography.bodyMedium)
+        } else Target.available.forEach { t ->
             val subtitle = if (t == Target.SIM_TOOLKIT) "${t.subtitle} · SIM ${vm.prefs.simSlot}" else t.subtitle
             RadioRow(selected = target == t, title = t.label, subtitle = subtitle) { target = t; error = null }
         }

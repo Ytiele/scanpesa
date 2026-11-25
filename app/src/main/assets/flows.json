@@ -1,8 +1,8 @@
 {
   "_comment": "Menu flows. SIM_TOOLKIT follows the real Safaricom SIM menu (Nov 2026). MPESA_APP and ONE_APP are still APPROXIMATE - tune them with Debug mode (see README). Matching is case-insensitive; punctuation and leading menu numbers ('1.') are ignored; exact matches beat partial ones. {SIM} = SIM slot from Settings. 'optional' steps are skipped when the next step is already on screen.",
   "version": 2,
-  "jobTimeoutSeconds": 20,
-  "stepTimeoutSeconds": 8,
+  "jobTimeoutSeconds": 40,
+  "stepTimeoutSeconds": 10,
   "amountLabels": ["amount", "enter amount", "kiasi"],
   "forbiddenButtons": [
     "send", "send now", "pay", "pay now", "confirm", "buy", "submit", "proceed", "complete",

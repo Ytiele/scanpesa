@@ -42,6 +42,9 @@ class FlowEngine(
 
     val currentStepName: String get() = steps.getOrNull(index)?.name ?: "finish"
 
+    /** Short progress line for the on-screen status strip, e.g. "Step 2/7: M-PESA". */
+    val progress: String get() = "Step ${(index + 1).coerceAtMost(steps.size)}/${steps.size}: $currentStepName"
+
     /** True once the engine has tapped or typed anything. */
     val hasActed: Boolean get() = actedOnce
 
@@ -156,13 +159,17 @@ class FlowEngine(
         var best: UiNode? = null
         var bestScore = 0
         for (f in screen.nodes) {
-            val target = f.clickTarget ?: continue
-            if (target.isEditable) continue
+            // Some SIM Toolkit menus don't mark their rows clickable; then the text node itself is
+            // the target and the Android side taps its on-screen position instead.
+            val target = f.clickTarget ?: f.node
+            if (target.isEditable || f.node.isEditable) continue
             val label = listOfNotNull(f.node.text, f.node.contentDescription)
-            val s = label.maxOfOrNull { Labels.best(it, patterns) } ?: 0
-            if (s == 0) continue
+            val match = label.maxOfOrNull { Labels.best(it, patterns) } ?: 0
+            if (match == 0) continue
             // Safety: once a number has been typed (or for any button), never hit Send/Pay/Confirm.
             if ((isButton || typedSomething) && label.any { isForbidden(it) }) continue
+            // Exact beats partial; at equal match, a real clickable beats plain text (e.g. a title).
+            val s = match * 2 + (if (f.clickTarget != null) 1 else 0)
             if (s > bestScore) { best = target; bestScore = s }
         }
         return best

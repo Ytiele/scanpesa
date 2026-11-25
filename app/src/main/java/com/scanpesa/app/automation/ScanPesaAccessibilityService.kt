@@ -10,6 +10,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
 import com.scanpesa.app.Notifier
 import com.scanpesa.app.data.Prefs
+import com.scanpesa.app.model.Target
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -32,10 +33,12 @@ class ScanPesaAccessibilityService : AccessibilityService() {
     private val tickRunnable = Runnable { tick() }
     private var jobPackages: Set<String> = emptySet()
     private var unlockHintShown = false
+    private var overlay: StatusOverlay? = null
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         prefs = Prefs(this)
+        overlay = StatusOverlay(this) { cancelJob() }
         instance = this
         _connected.value = true
         refreshWatched()
@@ -45,7 +48,9 @@ class ScanPesaAccessibilityService : AccessibilityService() {
     /** Re-reads flows.json + Settings overrides and watches exactly those packages. */
     fun refreshWatched() {
         val cfg = runCatching { FlowRepository.get(this) }.getOrNull()
-        watched = (cfg?.allPackages ?: DEFAULT_PACKAGES) + prefs.allPackageOverrides
+        // Only the targets shown in the app (currently SIM Toolkit), plus any app picked in Settings.
+        watched = if (cfg == null) DEFAULT_PACKAGES
+        else Target.available.flatMap { TargetLauncher.packagesFor(this, it) }.toSet()
         serviceInfo = serviceInfo.apply { packageNames = watched.toTypedArray() }
         DebugLog.event("Watching ${watched.joinToString()}")
     }
@@ -61,13 +66,23 @@ class ScanPesaAccessibilityService : AccessibilityService() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        overlay?.hide()
         if (instance === this) instance = null
         _connected.value = false
         super.onDestroy()
     }
 
     /** Called by the app right after it launches the target app. */
-    fun onJobStarted() = scheduleTick(600)
+    fun onJobStarted() {
+        overlay?.show("Starting… opening ${JobStore.current?.target?.label ?: "app"}")
+        scheduleTick(600)
+    }
+
+    /** Stop button on the status strip. */
+    private fun cancelJob() {
+        val job = JobStore.current ?: run { overlay?.hide(); return }
+        finish(job, Outcome.Failed(engine?.currentStepName ?: "start", "Stopped by you"))
+    }
 
     private fun scheduleTick(delay: Long) {
         handler.removeCallbacks(tickRunnable)
@@ -120,7 +135,8 @@ class ScanPesaAccessibilityService : AccessibilityService() {
                 unlockHintShown = true
                 toast("Unlock ${job.target.label} if asked. ScanPesa will continue.", long = false)
             }
-            e.tick(root?.let(::AndroidNode), now, why)
+            overlay?.show(e.progress)
+            e.tick(root?.let { AndroidNode(it, this) { overlay?.passThrough() } }, now, why)
         } catch (t: Throwable) {
             Outcome.Failed(e.currentStepName, "Internal error: ${t.javaClass.simpleName}")
         }
@@ -140,6 +156,7 @@ class ScanPesaAccessibilityService : AccessibilityService() {
                 prefs.lastResult = Prefs.LastResult(true, outcome.message, "${job.target.label}: entered ${describe(job)}", System.currentTimeMillis())
                 DebugLog.event("DONE: ${outcome.message}")
                 toast(outcome.message, long = true)
+                overlay?.show("Done ✓ ${outcome.message}", finished = true, autoHideMs = 6000)
                 Notifier.show(this, outcome.message, "ScanPesa entered ${describe(job)}. Now type the amount and your PIN yourself.")
             }
             is Outcome.Failed -> {
@@ -148,6 +165,7 @@ class ScanPesaAccessibilityService : AccessibilityService() {
                 )
                 DebugLog.event("FAILED at \"${outcome.step}\": ${outcome.reason}")
                 toast("ScanPesa stopped at \"${outcome.step}\"", long = true)
+                overlay?.show("Stopped at \"${outcome.step}\": ${outcome.reason}", error = true, finished = true, autoHideMs = 15000)
                 Notifier.show(
                     this, "Auto-fill stopped: ${outcome.step}",
                     "${outcome.reason}. Please continue by hand. Number: ${describe(job)}",

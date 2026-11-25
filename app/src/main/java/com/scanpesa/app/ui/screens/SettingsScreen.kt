@@ -57,10 +57,10 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onDebug: () -> Unit) {
     var taps by remember { mutableIntStateOf(0) }
     var hasOverride by remember { mutableStateOf(FlowRepository.hasOverride(ctx)) }
     var showDisclosure by remember { mutableStateOf(false) }
-    var resolved by remember { mutableStateOf(Target.entries.associateWith { TargetLauncher.resolvePackage(ctx, it, prefs.simSlot) }) }
+    var resolved by remember { mutableStateOf(Target.available.associateWith { TargetLauncher.resolvePackage(ctx, it, prefs.simSlot) }) }
     var picking by remember { mutableStateOf<Target?>(null) }
     fun refreshApps() {
-        resolved = Target.entries.associateWith { TargetLauncher.resolvePackage(ctx, it, prefs.simSlot) }
+        resolved = Target.available.associateWith { TargetLauncher.resolvePackage(ctx, it, prefs.simSlot) }
         ScanPesaAccessibilityService.instance?.refreshWatched()
     }
 
@@ -90,10 +90,10 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onDebug: () -> Unit) {
             Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            SectionCard {
+            if (Target.available.size > 1) SectionCard {
                 Text("Default target", style = MaterialTheme.typography.titleMedium)
                 RadioRow(defaultTarget == null, "Last one I used") { defaultTarget = null; prefs.defaultTarget = null }
-                Target.entries.forEach { t ->
+                Target.available.forEach { t ->
                     RadioRow(defaultTarget == t, t.label, t.subtitle) { defaultTarget = t; prefs.defaultTarget = t }
                 }
             }
@@ -109,7 +109,7 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onDebug: () -> Unit) {
                     "If Go opens the wrong app (or says it isn't installed), pick the right one here.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                Target.entries.forEach { t ->
+                Target.available.forEach { t ->
                     val pkg = resolved[t]
                     val custom = prefs.packageOverride(t) != null
                     Column(Modifier.fillMaxWidth().clickable { picking = t }.padding(vertical = 6.dp)) {
