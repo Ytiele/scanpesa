@@ -9,6 +9,19 @@ ScanPesa reads M-PESA payment details from signs, stickers and receipts with the
 - AccessibilityService driven by an editable `flows.json`
 - Room history (last 50 scans)
 
+## How it works (for the user)
+
+1. Tap **Scan M-PESA details** and point the camera at the sign, sticker or receipt.
+2. Tap the shutter. ScanPesa takes a full-resolution photo and reads it on the phone (about a second).
+3. ScanPesa **decides on its own** what to pay and shows it, highlighted on the photo:
+   - a Paybill / Till next to its label ("Paybill", "Till", "Business No", "Buy Goods"...) beats phone numbers;
+   - with several, the number printed largest wins;
+   - a phone number alone is Send Money, or Pochi la Biashara if the sign says "Pochi".
+4. Tap **Go** (or **Retake**). There is nothing to type, select or edit.
+
+ScanPesa never guesses: a number without a Paybill/Till label that isn't a full phone number is
+ignored, and a Paybill whose account can't be read keeps Go disabled until you retake.
+
 ---
 
 ## 1. Open the project in Android Studio
@@ -57,7 +70,7 @@ After each Go, the home screen shows **Last auto-fill**: either done, or the ste
 ### Accessibility disclosure (shown in the app, as Google Play requires)
 
 > **How ScanPesa uses Accessibility**
-> - **What it does:** When you tap Go, ScanPesa opens the app you picked (M-PESA app, SIM Toolkit or One App). It taps the menu items for you and types in only the phone, paybill, account or till number you just confirmed.
+> - **What it does:** When you tap Go, ScanPesa opens SIM Toolkit, taps the M-PESA menu items for you and types in only the phone, paybill, account or till number shown on the result screen.
 > - **Where it stops:** It stops as soon as the amount screen appears. You always type the amount and your PIN yourself.
 > - **What it never does:** It never reads, stores or types your PIN or any password field. It never types an amount. It never presses Send, Pay or Confirm.
 > - **Which apps:** It only works inside those three Safaricom/SIM apps, and only for up to 20 seconds after you tap Go. Then it stops and tells you which step it reached.
@@ -200,7 +213,7 @@ app/src/main/java/com/scanpesa/app/
   automation/  FlowConfig (JSON), FlowEngine (pure, tested), ScanPesaAccessibilityService,
                AndroidNode, NodeDumper, TargetLauncher, JobStore, DebugLog
   data/        Room history, Prefs
-  ui/          Compose screens: onboarding, home, scan, confirm, history, settings, debug
+  ui/          Compose screens: onboarding, home, scan (photo), result (read-only, Go/Retake), history, settings, debug
 app/src/main/assets/flows.json       editable menu flows (approximate, tune on your phone)
 app/src/test/                        MpesaParserTest (27 sign strings), FlowEngineTest
 ```

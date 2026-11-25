@@ -40,7 +40,8 @@ object MpesaParser {
     )
 
     private val PHONE_RE = Regex("""(?<![\d+])(?:\+?254|0)([17]\d{8})(?!\d)""")
-    private val BUSINESS_NUM_RE = Regex("""(?<!\d)\d{5,7}(?!\d)""")
+    /** Paybill/Till numbers: 5-7 digits, never starting with 0 (that would be a misread phone). */
+    private val BUSINESS_NUM_RE = Regex("""(?<!\d)[1-9]\d{4,6}(?!\d)""")
 
     // ------------------------------------------------------------------ normalisation
 

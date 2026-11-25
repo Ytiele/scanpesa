@@ -11,7 +11,6 @@ import android.os.VibratorManager
 import android.util.Size as CamSize
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
@@ -46,11 +45,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconToggleButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -78,7 +75,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.scanpesa.app.R
 import com.scanpesa.app.ui.AppViewModel
 import com.scanpesa.app.ui.BigButton
-import com.scanpesa.app.ui.BigOutlinedButton
 import com.scanpesa.app.ui.Green
 import com.scanpesa.app.ui.PhotoReader
 import com.scanpesa.app.ui.ScreenTopBar
@@ -94,7 +90,7 @@ private fun selector(target: CamSize, rule: Int) = ResolutionSelector.Builder()
     .build()
 
 @Composable
-fun ScanScreen(vm: AppViewModel, onPhotoRead: () -> Unit, onManual: () -> Unit, onBack: () -> Unit) {
+fun ScanScreen(vm: AppViewModel, onPhotoRead: () -> Unit, onBack: () -> Unit) {
     val ctx = LocalContext.current
     var granted by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
@@ -113,13 +109,9 @@ fun ScanScreen(vm: AppViewModel, onPhotoRead: () -> Unit, onManual: () -> Unit, 
             onPhotoRead()
         }
     }
-    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) read(PhotoReader.fromUri(ctx, uri))
-    }
-    val openGallery = { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        ScreenTopBar("Scan", onBack, action = { TextButton(onClick = onManual) { Text("Type it in") } })
+        ScreenTopBar("Scan", onBack)
         if (!granted) {
             Column(Modifier.padding(horizontal = Space.screen), verticalArrangement = Arrangement.spacedBy(Space.m)) {
                 Text(
@@ -127,16 +119,15 @@ fun ScanScreen(vm: AppViewModel, onPhotoRead: () -> Unit, onManual: () -> Unit, 
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 BigButton("Allow camera", onClick = { launcher.launch(Manifest.permission.CAMERA) })
-                BigOutlinedButton("Pick a photo instead", onClick = openGallery)
             }
         } else {
-            CameraScanner(vm, reading, onPhoto = ::read, onGallery = openGallery)
+            CameraScanner(reading, onPhoto = ::read)
         }
     }
 }
 
 @Composable
-private fun CameraScanner(vm: AppViewModel, reading: Bitmap?, onPhoto: (Bitmap?) -> Unit, onGallery: () -> Unit) {
+private fun CameraScanner(reading: Bitmap?, onPhoto: (Bitmap?) -> Unit) {
     val ctx = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
@@ -250,7 +241,7 @@ private fun CameraScanner(vm: AppViewModel, reading: Bitmap?, onPhoto: (Bitmap?)
 
         Spacer(Modifier.height(Space.s))
         Text(
-            "Works from a normal distance · pinch to zoom · tap to focus",
+            "Fit the Paybill or Till in the frame · pinch to zoom · tap to focus",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -265,9 +256,7 @@ private fun CameraScanner(vm: AppViewModel, reading: Bitmap?, onPhoto: (Bitmap?)
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            FilledTonalIconButton(onClick = onGallery, modifier = Modifier.size(56.dp)) {
-                Icon(painterResource(R.drawable.ic_photo), contentDescription = "Pick a photo", modifier = Modifier.size(26.dp))
-            }
+            Spacer(Modifier.size(56.dp)) // keeps the shutter centred
             Shutter(busy = reading != null, onClick = ::shoot)
             val hasFlash = camera?.cameraInfo?.hasFlashUnit() == true
             FilledIconToggleButton(

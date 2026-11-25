@@ -74,6 +74,53 @@ class PhotoTokensTest {
         assertEquals("247247", PhotoTokens.defaultSelection(tokens, cands)?.value)
     }
 
+    // ------------------------------------------------------------- automatic choice (no user selection)
+
+    private fun auto(vararg lines: OcrLine): PhotoTokens.AutoPick? {
+        val l = lines.toList()
+        val t = text(l)
+        val c = MpesaParser.parse(t)
+        return PhotoTokens.autoPick(PhotoTokens.extract(l, c), c, t)
+    }
+
+    @Test fun autoPaybillWithAccountBeatsEnquiriesPhone() {
+        val a = auto(line(0, "PAYBILL", "NO247247"), line(1, "ACCOUNT", "NC556677"), line(2, "Enquiries:", "0712", "345", "678"))!!
+        assertEquals(PaymentType.PAYBILL, a.candidate.type)
+        assertEquals("247247", a.candidate.number)
+        assertEquals("556677", a.candidate.account)
+        assertNotNull(a.numberBox); assertNotNull(a.accountBox)
+    }
+
+    @Test fun autoLargestNumberWinsBetweenTwoBusinessNumbers() {
+        // Small "Paybill 222111" footer vs big "TILL 987654" headline
+        val small = line(0, "Paybill", "222111")
+        val big = OcrLine(listOf(OcrWord("TILL", Box(0f, 200f, 200f, 400f)), OcrWord("987654", Box(220f, 200f, 800f, 400f))))
+        val a = auto(small, big)!!
+        assertEquals(PaymentType.TILL, a.candidate.type)
+        assertEquals("987654", a.candidate.number)
+    }
+
+    @Test fun autoBarePhoneIsSendMoney() {
+        val a = auto(line(0, "Mama", "Njeri"), line(1, "0722", "000", "111"))!!
+        assertEquals(PaymentType.SEND_MONEY, a.candidate.type)
+        assertTrue(a.candidate.typeConfirmed)
+    }
+
+    @Test fun autoPochiWhenSignSaysPochi() {
+        val a = auto(line(0, "POCHI", "LA", "BIASHARA"), line(1, "0798", "765", "432"))!!
+        assertEquals(PaymentType.POCHI, a.candidate.type)
+    }
+
+    /** Real case (S22, handwritten notebook): OCR returned a fragment "074177" with no label. */
+    @Test fun autoNeverGuessesFromAStrayFragment() {
+        assertNull(auto(line(0, "074177", "9s", "91"), line(1, "Verify", "license")))
+        assertNull(auto(line(0, "Till"), line(5, "Peleza"), line(9, "074177")))
+    }
+
+    @Test fun autoNothingOnBlankPhoto() {
+        assertNull(auto(line(0, "Open", "8am"), line(1, "KSh", "50")))
+    }
+
     @Test fun noDefaultWhenSeveralPayments() {
         val lines = listOf(line(0, "Paybill", "222111"), line(1, "Till", "333444"))
         val cands = MpesaParser.parse(text(lines))

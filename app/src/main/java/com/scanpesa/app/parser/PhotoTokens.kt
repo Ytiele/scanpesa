@@ -28,7 +28,7 @@ object PhotoTokens {
 
     /** Valid payment numbers: 5–7 digit paybill/till, or a Kenyan mobile number. */
     fun cleanNumber(digits: String): String? = when {
-        digits.length in 5..7 -> digits
+        digits.length in 5..7 && digits[0] != '0' -> digits // Paybill/Till numbers never start with 0
         digits.length == 10 && digits[0] == '0' && (digits[1] == '7' || digits[1] == '1') -> digits
         digits.length == 12 && digits.startsWith("254") && (digits[3] == '7' || digits[3] == '1') -> "0" + digits.substring(3)
         digits.length == 9 && digits[0] == '7' -> "0$digits"
@@ -115,6 +115,35 @@ object PhotoTokens {
             ?: candidates.filter { it.type == PaymentType.PAYBILL || it.type == PaymentType.TILL }.singleOrNull()
             ?: return null
         return tokens.firstOrNull { it.candidate == pick && !it.isAccount }
+    }
+
+    /** The result of reading a photo with no user choice: what to pay and which boxes to highlight. */
+    data class AutoPick(val candidate: Candidate, val numberBox: Box?, val accountBox: Box?)
+
+    private fun height(b: Box) = b.bottom - b.top
+
+    /**
+     * Decides the payment on its own:
+     *  - a Paybill/Till beats phone numbers (those are usually "Enquiries / Call");
+     *  - among several, the number printed largest on the sign wins;
+     *  - a phone is Pochi if the sign says "Pochi", otherwise Send Money.
+     */
+    fun autoPick(tokens: List<NumberToken>, candidates: List<Candidate>, fullText: String): AutoPick? {
+        fun boxOf(c: Candidate) = tokens.filter { it.candidate == c && !it.isAccount }.maxByOrNull { height(it.box) }?.box
+        fun accountBoxOf(c: Candidate) = tokens.firstOrNull { it.candidate == c && it.isAccount }?.box
+        fun size(c: Candidate) = boxOf(c)?.let(::height) ?: 0f
+
+        val business = candidates.filter { it.type == PaymentType.PAYBILL || it.type == PaymentType.TILL }
+        val chosen = business.maxByOrNull(::size)
+            ?: candidates.filter { it.typeConfirmed }.maxByOrNull(::size) // Pochi / Send Money named on the sign
+            ?: candidates.maxByOrNull(::size)
+        if (chosen != null) {
+            val c = if (chosen.typeConfirmed) chosen else chosen.copy(type = PaymentType.SEND_MONEY, typeConfirmed = true)
+            return AutoPick(c, boxOf(chosen), accountBoxOf(chosen))
+        }
+        // Nothing the parser could stand behind (no Paybill/Till label, no full phone number):
+        // never guess a payment from a stray number. The user retakes instead.
+        return null
     }
 
     /** Where a photo of [imgW]x[imgH] lands when shown "fit" (whole photo visible) in [viewW]x[viewH]. */

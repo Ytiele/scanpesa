@@ -1,12 +1,7 @@
 package com.scanpesa.app.ui
 
-import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.ImageDecoder
 import android.graphics.Matrix
-import android.net.Uri
-import android.os.Build
 import androidx.camera.core.ImageProxy
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -59,23 +54,4 @@ object PhotoReader {
         if (out !== full) full.recycle()
         return out
     }
-
-    /** Gallery image → upright software bitmap scaled to [OCR_SIDE] (EXIF rotation applied on Android 9+). */
-    fun fromUri(ctx: Context, uri: Uri): Bitmap? = runCatching {
-        if (Build.VERSION.SDK_INT >= 28) {
-            ImageDecoder.decodeBitmap(ImageDecoder.createSource(ctx.contentResolver, uri)) { decoder, info, _ ->
-                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                val s = minOf(1f, OCR_SIDE.toFloat() / maxOf(info.size.width, info.size.height))
-                decoder.setTargetSize((info.size.width * s).toInt().coerceAtLeast(1), (info.size.height * s).toInt().coerceAtLeast(1))
-            }
-        } else {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            ctx.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-            var sample = 1
-            while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= OCR_SIDE) sample *= 2
-            ctx.contentResolver.openInputStream(uri)?.use {
-                BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
-            }
-        }
-    }.getOrNull()
 }

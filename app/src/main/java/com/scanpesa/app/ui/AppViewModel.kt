@@ -1,7 +1,6 @@
 package com.scanpesa.app.ui
 
 import android.app.Application
-import android.graphics.Bitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.scanpesa.app.automation.FlowRepository
@@ -48,44 +47,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val history: StateFlow<List<ScanEntity>> =
         dao.recent().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** Candidates from the last scan (more than one => user picks). */
-    val candidates = MutableStateFlow<List<Candidate>>(emptyList())
-    val frozenFrame = MutableStateFlow<Bitmap?>(null)
+    /** The current payment, decided automatically from the photo (or reused from History). */
     val draft = MutableStateFlow<Draft?>(null)
-
-    fun onScanned(found: List<Candidate>, frame: Bitmap?) {
-        candidates.value = found
-        frozenFrame.value = frame
-        draft.value = found.singleOrNull()?.toDraft()
-    }
-
-    fun pick(c: Candidate) { draft.value = c.toDraft() }
-
-    /** The last photo read (camera shutter or gallery), shown on the "Tap the number" screen. */
+    /** The photo it was read from (null when reused from History) and the boxes to highlight. */
     val photo = MutableStateFlow<PhotoScan?>(null)
+    val highlight = MutableStateFlow<List<com.scanpesa.app.parser.Box>>(emptyList())
 
+    /** A photo was read: decide the payment with no user choice. */
     fun onPhotoRead(p: PhotoScan) {
         photo.value = p
-        candidates.value = emptyList()
-        draft.value = null
-    }
-
-    /** The user tapped / confirmed a number on the photo. */
-    fun pickFromPhoto(c: Candidate) {
-        frozenFrame.value = photo.value?.bitmap
-        candidates.value = emptyList()
-        draft.value = c.toDraft()
-    }
-
-    fun startManual() {
-        candidates.value = emptyList()
-        frozenFrame.value = null
-        draft.value = Draft(PaymentType.PAYBILL, "", "", typeConfirmed = true)
+        val pick = com.scanpesa.app.parser.PhotoTokens.autoPick(p.tokens, p.candidates, p.text)
+        draft.value = pick?.candidate?.toDraft()
+        highlight.value = listOfNotNull(pick?.numberBox, pick?.accountBox)
     }
 
     fun reuse(e: ScanEntity) {
-        candidates.value = emptyList()
-        frozenFrame.value = null
+        photo.value = null
+        highlight.value = emptyList()
         draft.value = Draft(PaymentType.fromName(e.type) ?: PaymentType.SEND_MONEY, e.number, e.account.orEmpty(), true)
     }
 
