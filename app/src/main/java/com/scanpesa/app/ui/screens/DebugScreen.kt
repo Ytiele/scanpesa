@@ -53,7 +53,7 @@ fun DebugScreen(onBack: () -> Unit) {
         ) {
             item {
                 Text(
-                    "Open the M-PESA app / SIM Toolkit / My Safaricom with Debug mode on, go through the menus, then come back here. " +
+                    "Open the M-PESA app / SIM Toolkit / One App with Debug mode on, go through the menus, then come back here. " +
                         "Each screen's nodes are listed below (also in logcat: adb logcat -s ScanPesaDump). Copy the exact text into flows.json.",
                     style = MaterialTheme.typography.bodyMedium,
                 )

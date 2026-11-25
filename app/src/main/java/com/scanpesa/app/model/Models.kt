@@ -16,10 +16,12 @@ enum class PaymentType(val label: String) {
 enum class Target(val label: String, val subtitle: String) {
     MPESA_APP("M-PESA app", "Safaricom M-PESA app"),
     SIM_TOOLKIT("SIM Toolkit", "Classic M-PESA menu on the SIM"),
-    MY_SAFARICOM("My Safaricom app", "Its M-PESA section");
+    ONE_APP("Safaricom One App", "Its M-PESA section");
 
     companion object {
-        fun fromName(name: String?): Target? = entries.firstOrNull { it.name == name }
+        /** "MY_SAFARICOM" is the old name of ONE_APP (kept so saved settings/history still load). */
+        fun fromName(name: String?): Target? =
+            if (name == "MY_SAFARICOM") ONE_APP else entries.firstOrNull { it.name == name }
     }
 }
 

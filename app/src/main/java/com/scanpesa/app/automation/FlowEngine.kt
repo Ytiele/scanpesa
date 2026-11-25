@@ -27,6 +27,8 @@ class FlowEngine(
     private val config: FlowConfig,
     private val startedAt: Long,
     private val placeholders: Map<String, String> = emptyMap(),
+    /** Extra time allowed before the first step, e.g. while the user unlocks the M-PESA app. */
+    private val loginWaitMs: Long = 0,
 ) {
     var index = 0
         private set
@@ -39,6 +41,12 @@ class FlowEngine(
     private val lastInputIndex = steps.indexOfLast { it.action == StepAction.INPUT }
 
     val currentStepName: String get() = steps.getOrNull(index)?.name ?: "finish"
+
+    /** True once the engine has tapped or typed anything. */
+    val hasActed: Boolean get() = actedOnce
+
+    private val jobDeadline get() = startedAt + config.jobTimeoutSeconds * 1000L + loginWaitMs
+    private val stepTimeoutMs get() = config.stepTimeoutSeconds * 1000L + (if (actedOnce) 0L else loginWaitMs)
 
     private val allInputsDone get() = index > lastInputIndex
 
@@ -71,14 +79,15 @@ class FlowEngine(
         return screen.nodes.any { !it.node.isEditable && Labels.best(it.node.text ?: it.node.contentDescription, config.amountLabels) > 0 }
     }
 
-    fun tick(root: UiNode?, now: Long): Outcome {
+    /** @param noRootReason why [root] is null (shown to the user if the step times out). */
+    fun tick(root: UiNode?, now: Long, noRootReason: String? = null): Outcome {
         val step = steps.getOrNull(index)
         val stepName = step?.name ?: "finish"
-        if (now - startedAt > config.jobTimeoutSeconds * 1000L) {
-            return Outcome.Failed(stepName, "Timed out after ${config.jobTimeoutSeconds} seconds")
+        if (now > jobDeadline) {
+            return Outcome.Failed(stepName, "Timed out after ${(jobDeadline - startedAt) / 1000} seconds")
         }
         if (now < settleUntil) return Outcome.Working
-        if (root == null) return stepTimeout(step, now, "the app screen could not be read")
+        if (root == null) return stepTimeout(step, now, noRootReason ?: "The app screen could not be read")
 
         val screen = Screen.of(root)
 
@@ -115,7 +124,7 @@ class FlowEngine(
             advance(now)
             return Outcome.Working
         }
-        if (step.optional && now - stepStartedAt > config.stepTimeoutSeconds * 500L) {
+        if (step.optional && now - stepStartedAt > stepTimeoutMs / 2) {
             index++ // optional step never showed up: move on instead of failing
             stepStartedAt = now
             return Outcome.Working
@@ -124,7 +133,7 @@ class FlowEngine(
     }
 
     private fun stepTimeout(step: FlowStep?, now: Long, why: String?): Outcome {
-        if (now - stepStartedAt <= config.stepTimeoutSeconds * 1000L) return Outcome.Working
+        if (now - stepStartedAt <= stepTimeoutMs) return Outcome.Working
         if (step == null) return Outcome.Failed("finish", why ?: "Screen did not change")
         val reason = why ?: when (step.action) {
             StepAction.CLICK -> "Could not find \"${texts(step).joinToString("\" / \"")}\" on screen"

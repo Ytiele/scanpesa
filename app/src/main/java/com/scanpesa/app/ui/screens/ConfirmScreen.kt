@@ -71,6 +71,7 @@ fun ConfirmScreen(vm: AppViewModel, onBack: () -> Unit, onRescan: () -> Unit) {
                     modifier = Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(16.dp)),
                 )
             }
+            BigOutlinedButton("↻  Retake scan", onClick = onRescan)
             val d = draft
             when {
                 d == null && candidates.size > 1 -> CandidatePicker(candidates, onPick = vm::pick, onRescan = onRescan)
@@ -120,12 +121,12 @@ private fun ConfirmForm(vm: AppViewModel, d: Draft, showBackToList: Boolean, onB
     var account by rememberSaveable(d) { mutableStateOf(d.account) }
     var target by rememberSaveable { mutableStateOf(vm.prefs.preferredTarget) }
     var error by remember { mutableStateOf<String?>(null) }
-    var askService by remember { mutableStateOf(false) }
+    var askService by remember { mutableStateOf<GoResult.NeedsService?>(null) }
 
     fun submit(autofill: Boolean) {
         when (val r = vm.go(type, number, account, target, autofill)) {
             GoResult.Launched -> error = null
-            GoResult.NeedsService -> askService = true
+            is GoResult.NeedsService -> askService = r
             is GoResult.Error -> error = r.message
         }
     }
@@ -192,16 +193,23 @@ private fun ConfirmForm(vm: AppViewModel, d: Draft, showBackToList: Boolean, onB
     )
     if (showBackToList) BigOutlinedButton("Pick a different result", onClick = onBackToList)
 
-    if (askService) {
+    askService?.let { need ->
         AlertDialog(
-            onDismissRequest = { askService = false },
-            title = { Text("Auto-fill is off") },
-            text = { Text("Turn on \"ScanPesa auto-fill\" in Accessibility settings so ScanPesa can type the numbers. Or open ${target.label} and type them yourself.") },
+            onDismissRequest = { askService = null },
+            title = { Text(if (need.enabledButNotRunning) "Auto-fill is not running" else "Auto-fill is off") },
+            text = {
+                Text(
+                    if (need.enabledButNotRunning)
+                        "\"ScanPesa auto-fill\" is switched on, but your phone has stopped it (battery saver). " +
+                            "In Accessibility settings switch it OFF and ON again. Also set ScanPesa's battery usage to \"Unrestricted\"."
+                    else "Turn on \"ScanPesa auto-fill\" in Accessibility settings so ScanPesa can type the numbers. Or open ${target.label} and type them yourself.",
+                )
+            },
             confirmButton = {
-                TextButton(onClick = { askService = false; TargetLauncher.openAccessibilitySettings(ctx) }) { Text("Turn on") }
+                TextButton(onClick = { askService = null; TargetLauncher.openAccessibilitySettings(ctx) }) { Text("Fix in settings") }
             },
             dismissButton = {
-                TextButton(onClick = { askService = false; submit(autofill = false) }) { Text("Just open the app") }
+                TextButton(onClick = { askService = null; submit(autofill = false) }) { Text("Just open the app") }
             },
         )
     }

@@ -2,5 +2,5 @@
 <resources>
     <string name="app_name">ScanPesa</string>
     <string name="accessibility_service_label">ScanPesa auto-fill</string>
-    <string name="accessibility_service_description">ScanPesa opens the M-PESA app, SIM Toolkit or My Safaricom and types in ONLY the phone, paybill, account or till number you confirmed. It stops before the amount and PIN. It never reads or types your PIN, never types an amount and never presses Send or Confirm. It only works inside those three apps, and only for 20 seconds after you tap Go. Nothing is sent to the internet.</string>
+    <string name="accessibility_service_description">ScanPesa opens the M-PESA app, SIM Toolkit or One App and types in ONLY the phone, paybill, account or till number you confirmed. It stops before the amount and PIN. It never reads or types your PIN, never types an amount and never presses Send or Confirm. It only works inside those three apps, and only for 20 seconds after you tap Go. Nothing is sent to the internet.</string>
 </resources>

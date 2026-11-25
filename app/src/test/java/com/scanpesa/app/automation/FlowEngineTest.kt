@@ -186,6 +186,74 @@ class FlowEngineTest {
         assertFalse(cfg.forbiddenButtons.isEmpty())
     }
 
+    private fun bundled(): FlowConfig {
+        val f = listOf(File("src/main/assets/flows.json"), File("app/src/main/assets/flows.json")).first { it.exists() }
+        return FlowConfig.parse(f.readText())
+    }
+
+    /** Replays the real Safaricom SIM menu described by the user (Nov 2026). */
+    @Test fun stkPaybillWithSearchContactsScreens() {
+        val cfg = bundled()
+        val steps = cfg.targets[Target.SIM_TOOLKIT]!!.flows[PaymentType.PAYBILL]!!
+        val e = FlowEngine(steps, JobValues("247247", "0712345678"), cfg, 0, mapOf("SIM" to "1"))
+        var t = 0L
+        fun tick(root: UiNode) { t += 1000; assertEquals(Outcome.Working, e.tick(root, t)) }
+
+        val mpesa = item("M-PESA"); tick(screen(item("Safaricom"), mpesa)); assertEquals(1, mpesa.clicks)
+        val lipa = item("Lipa na M-PESA")
+        tick(screen(item("Send Money"), item("Withdraw"), item("Buy Airtime"), item("Loans and Savings"), lipa, item("My Account")))
+        assertEquals(1, lipa.clicks)
+        val payBill = item("Pay Bill"); tick(screen(payBill, item("Buy Goods"), item("Pochi la Biashara"))); assertEquals(1, payBill.clicks)
+
+        val search1 = item("Search contacts"); val enterBiz = item("Enter business number")
+        tick(screen(search1, enterBiz))
+        assertEquals(1, enterBiz.clicks); assertEquals(0, search1.clicks)
+
+        val bizField = field(""); tick(screen(label("Enter business number"), bizField, button("OK")))
+        assertEquals("247247", bizField.typed)
+        val ok1 = button("OK"); tick(screen(label("Enter business number"), FakeNode(text = "247247", isEditable = true), ok1))
+        assertEquals(1, ok1.clicks)
+
+        val search2 = item("Search contacts"); val accItem = item("Account number")
+        tick(screen(search2, accItem))
+        assertEquals(1, accItem.clicks); assertEquals(0, search2.clicks)
+
+        val accField = field(""); tick(screen(label("Account number"), accField, button("OK")))
+        assertEquals("0712345678", accField.typed)
+        val ok2 = button("OK"); tick(screen(label("Account number"), FakeNode(text = "0712345678", isEditable = true), ok2))
+        assertEquals(1, ok2.clicks)
+
+        val amount = field("")
+        t += 1000
+        assertEquals(Outcome.Done(FlowEngine.DONE_MESSAGE), e.tick(screen(label("Enter Amount"), amount, button("OK")), t))
+        assertNull(amount.typed)
+    }
+
+    @Test fun stkSendMoneyOpensInputDirectly() {
+        val cfg = bundled()
+        val steps = cfg.targets[Target.SIM_TOOLKIT]!!.flows[PaymentType.SEND_MONEY]!!
+        val e = FlowEngine(steps, JobValues("0712345678", null), cfg, 0, mapOf("SIM" to "1"))
+        e.tick(screen(item("Safaricom"), item("M-PESA")), 1000)
+        val send = item("Send Money"); e.tick(screen(send, item("Withdraw"), item("Lipa na M-PESA")), 2000)
+        assertEquals(1, send.clicks)
+        val phone = field(""); e.tick(screen(label("Enter phone number"), phone, button("OK")), 3000)
+        assertEquals("0712345678", phone.typed)
+    }
+
+    @Test fun loginWaitGivesTimeToUnlockButTypesNothing() {
+        val steps = listOf(
+            FlowStep("Pay", StepAction.CLICK, listOf("pay")),
+            FlowStep("Amount", StepAction.AWAIT_AMOUNT),
+        )
+        val e = FlowEngine(steps, JobValues("123456", null), config, 0, loginWaitMs = 45_000)
+        val keypad = screen(label("Enter M-PESA PIN"), button("1"), button("2"))
+        assertEquals(Outcome.Working, e.tick(keypad, 15_000)) // past the normal 8 s step timeout
+        assertEquals(Outcome.Working, e.tick(keypad, 30_000))
+        val pay = item("Pay"); e.tick(screen(pay), 40_000)
+        assertEquals(1, pay.clicks)
+        assertTrue(e.tick(screen(), 70_000) is Outcome.Failed) // hard stop: 20 s + 45 s
+    }
+
     @Test fun labelNormalisation() {
         assertEquals("send money", Labels.norm(" 2. Send Money "))
         assertEquals(3, Labels.score("1) Pay Bill", "pay bill"))

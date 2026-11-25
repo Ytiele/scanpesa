@@ -36,6 +36,8 @@ data class TargetConfig(
     /** Package names tried for SIM slot 2 (SIM Toolkit only). Falls back to [packages]. */
     val packagesSim2: List<String>,
     val clearTask: Boolean,
+    /** Seconds ScanPesa waits (typing nothing) for the user to unlock the app before step 1. */
+    val loginWaitSeconds: Int,
     val flows: Map<PaymentType, List<FlowStep>>,
 )
 
@@ -78,6 +80,7 @@ data class FlowConfig(
                     packages = pk,
                     packagesSim2 = t.optJSONArray("packagesSim2").strings().ifEmpty { pk },
                     clearTask = t.optBoolean("clearTask", true),
+                    loginWaitSeconds = t.optInt("loginWaitSeconds", 0).coerceIn(0, 120),
                     flows = flows,
                 )
             }

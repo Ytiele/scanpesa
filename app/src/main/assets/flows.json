@@ -1,6 +1,6 @@
 {
-  "_comment": "APPROXIMATE starting flows - tune the 'texts' using Debug mode (see README). Matching is case-insensitive; punctuation and leading menu numbers ('1.') are ignored. Exact matches beat partial ones. {SIM} is replaced with the SIM slot (1 or 2) from Settings.",
-  "version": 1,
+  "_comment": "Menu flows. SIM_TOOLKIT follows the real Safaricom SIM menu (Nov 2026). MPESA_APP and ONE_APP are still APPROXIMATE - tune them with Debug mode (see README). Matching is case-insensitive; punctuation and leading menu numbers ('1.') are ignored; exact matches beat partial ones. {SIM} = SIM slot from Settings. 'optional' steps are skipped when the next step is already on screen.",
+  "version": 2,
   "jobTimeoutSeconds": 20,
   "stepTimeoutSeconds": 8,
   "amountLabels": ["amount", "enter amount", "kiasi"],
@@ -10,45 +10,51 @@
   ],
   "targets": {
     "SIM_TOOLKIT": {
-      "_comment": "APPROXIMATE. Dual-SIM phones may use com.android.stk2 for SIM 2.",
-      "packages": ["com.android.stk"],
-      "packagesSim2": ["com.android.stk2", "com.android.stk"],
+      "_comment": "Menu: Safaricom | M-PESA > Send Money / Withdraw / Buy Airtime / Loans and Savings / Lipa na M-PESA (Pay Bill, Buy Goods, Pochi la Biashara) / My Account. Pay Bill shows 'Search contacts | Enter business number', then 'Search contacts | Account number'.",
+      "packages": ["com.android.stk", "com.sec.android.app.stk", "com.mediatek.stk", "com.android.stk2"],
+      "packagesSim2": ["com.android.stk2", "com.android.stk", "com.sec.android.app.stk", "com.mediatek.stk"],
       "clearTask": true,
+      "loginWaitSeconds": 0,
       "flows": {
         "SEND_MONEY": [
-          { "name": "Choose SIM / Safaricom", "action": "click", "texts": ["sim {SIM}", "sim{SIM}", "safaricom"], "optional": true },
-          { "name": "M-PESA menu", "action": "click", "texts": ["m-pesa", "mpesa"] },
+          { "name": "Choose SIM", "action": "click", "texts": ["sim {SIM}", "sim{SIM}", "safaricom"], "optional": true },
+          { "name": "M-PESA", "action": "click", "texts": ["m-pesa", "mpesa"] },
           { "name": "Send Money", "action": "click", "texts": ["send money"] },
-          { "name": "Enter phone no.", "action": "input", "value": "number", "texts": ["enter phone no", "enter phone number", "phone no", "phone number", "mobile"] },
+          { "name": "Enter phone number (menu)", "action": "click", "texts": ["enter phone number", "enter phone no", "enter number", "enter mobile number"], "optional": true },
+          { "name": "Enter phone number", "action": "input", "value": "number", "texts": ["enter phone number", "enter phone no", "phone number", "phone no", "mobile number", "enter number"] },
           { "name": "OK after phone", "action": "press", "texts": ["ok", "next", "continue"] },
           { "name": "Amount screen", "action": "await_amount" }
         ],
         "PAYBILL": [
-          { "name": "Choose SIM / Safaricom", "action": "click", "texts": ["sim {SIM}", "sim{SIM}", "safaricom"], "optional": true },
-          { "name": "M-PESA menu", "action": "click", "texts": ["m-pesa", "mpesa"] },
+          { "name": "Choose SIM", "action": "click", "texts": ["sim {SIM}", "sim{SIM}", "safaricom"], "optional": true },
+          { "name": "M-PESA", "action": "click", "texts": ["m-pesa", "mpesa"] },
           { "name": "Lipa na M-PESA", "action": "click", "texts": ["lipa na m-pesa", "lipa na mpesa"] },
           { "name": "Pay Bill", "action": "click", "texts": ["pay bill", "paybill"] },
-          { "name": "Enter business no.", "action": "input", "value": "number", "texts": ["enter business no", "business no", "business number", "enter business"] },
-          { "name": "OK after business no.", "action": "press", "texts": ["ok", "next", "continue"] },
-          { "name": "Enter account no.", "action": "input", "value": "account", "texts": ["enter account no", "account no", "account number", "enter account"] },
-          { "name": "OK after account no.", "action": "press", "texts": ["ok", "next", "continue"] },
+          { "name": "Enter business number (menu)", "action": "click", "texts": ["enter business number", "enter business no", "business number", "business no"], "optional": true },
+          { "name": "Enter business number", "action": "input", "value": "number", "texts": ["enter business number", "enter business no", "business number", "business no"] },
+          { "name": "OK after business number", "action": "press", "texts": ["ok", "next", "continue"] },
+          { "name": "Account number (menu)", "action": "click", "texts": ["account number", "enter account number", "enter account no", "account no"], "optional": true },
+          { "name": "Enter account number", "action": "input", "value": "account", "texts": ["account number", "enter account number", "enter account no", "account no"] },
+          { "name": "OK after account number", "action": "press", "texts": ["ok", "next", "continue"] },
           { "name": "Amount screen", "action": "await_amount" }
         ],
         "TILL": [
-          { "name": "Choose SIM / Safaricom", "action": "click", "texts": ["sim {SIM}", "sim{SIM}", "safaricom"], "optional": true },
-          { "name": "M-PESA menu", "action": "click", "texts": ["m-pesa", "mpesa"] },
+          { "name": "Choose SIM", "action": "click", "texts": ["sim {SIM}", "sim{SIM}", "safaricom"], "optional": true },
+          { "name": "M-PESA", "action": "click", "texts": ["m-pesa", "mpesa"] },
           { "name": "Lipa na M-PESA", "action": "click", "texts": ["lipa na m-pesa", "lipa na mpesa"] },
-          { "name": "Buy Goods and Services", "action": "click", "texts": ["buy goods and services", "buy goods"] },
-          { "name": "Enter till no.", "action": "input", "value": "number", "texts": ["enter till no", "till no", "till number", "enter till"] },
-          { "name": "OK after till no.", "action": "press", "texts": ["ok", "next", "continue"] },
+          { "name": "Buy Goods", "action": "click", "texts": ["buy goods", "buy goods and services"] },
+          { "name": "Enter till number (menu)", "action": "click", "texts": ["enter till number", "enter till no"], "optional": true },
+          { "name": "Enter till number", "action": "input", "value": "number", "texts": ["enter till number", "enter till no", "till number", "till no"] },
+          { "name": "OK after till number", "action": "press", "texts": ["ok", "next", "continue"] },
           { "name": "Amount screen", "action": "await_amount" }
         ],
         "POCHI": [
-          { "name": "Choose SIM / Safaricom", "action": "click", "texts": ["sim {SIM}", "sim{SIM}", "safaricom"], "optional": true },
-          { "name": "M-PESA menu", "action": "click", "texts": ["m-pesa", "mpesa"] },
-          { "name": "Lipa na M-PESA (if Pochi is inside it)", "action": "click", "texts": ["lipa na m-pesa", "lipa na mpesa"], "optional": true },
+          { "name": "Choose SIM", "action": "click", "texts": ["sim {SIM}", "sim{SIM}", "safaricom"], "optional": true },
+          { "name": "M-PESA", "action": "click", "texts": ["m-pesa", "mpesa"] },
+          { "name": "Lipa na M-PESA", "action": "click", "texts": ["lipa na m-pesa", "lipa na mpesa"] },
           { "name": "Pochi la Biashara", "action": "click", "texts": ["pochi la biashara", "pochi"] },
-          { "name": "Enter phone no.", "action": "input", "value": "number", "texts": ["enter phone no", "enter phone number", "phone no", "phone number", "mobile"] },
+          { "name": "Enter phone number (menu)", "action": "click", "texts": ["enter phone number", "enter phone no", "enter number"], "optional": true },
+          { "name": "Enter phone number", "action": "input", "value": "number", "texts": ["enter phone number", "enter phone no", "phone number", "phone no", "mobile number", "enter number"] },
           { "name": "OK after phone", "action": "press", "texts": ["ok", "next", "continue"] },
           { "name": "Amount screen", "action": "await_amount" }
         ]
@@ -56,78 +62,80 @@
     },
 
     "MPESA_APP": {
-      "_comment": "APPROXIMATE. Verify the package name with adb (see README).",
+      "_comment": "APPROXIMATE - needs a Debug dump from your phone. clearTask=false keeps you logged in; loginWaitSeconds gives you time to unlock with your PIN/fingerprint (ScanPesa never touches it).",
       "packages": ["com.safaricom.mpesa.lifestyle"],
-      "clearTask": true,
+      "clearTask": false,
+      "loginWaitSeconds": 45,
       "flows": {
         "SEND_MONEY": [
-          { "name": "Send & Request", "action": "click", "texts": ["send and request", "send & request", "send money"] },
-          { "name": "Send Money", "action": "click", "texts": ["send money"], "optional": true },
-          { "name": "Enter phone number", "action": "input", "value": "number", "texts": ["phone number", "enter phone number", "enter number", "mobile number", "phone"] },
+          { "name": "Send and Request", "action": "click", "texts": ["send and request", "send & request", "send"], "optional": true },
+          { "name": "Send Money", "action": "click", "texts": ["send money", "send to one", "send"], "optional": true },
+          { "name": "Enter phone number", "action": "input", "value": "number", "texts": ["enter phone number", "phone number", "enter number", "mobile number", "search", "name or number", "phone"] },
           { "name": "Continue after number", "action": "press", "texts": ["continue", "next"], "optional": true },
           { "name": "Amount screen", "action": "await_amount" }
         ],
         "PAYBILL": [
-          { "name": "Pay", "action": "click", "texts": ["pay", "lipa na m-pesa"] },
-          { "name": "Paybill", "action": "click", "texts": ["paybill", "pay bill"] },
-          { "name": "Business number", "action": "input", "value": "number", "texts": ["business number", "business no", "paybill number", "enter business number"] },
-          { "name": "Continue after business no.", "action": "press", "texts": ["continue", "next"], "optional": true },
-          { "name": "Account number", "action": "input", "value": "account", "texts": ["account number", "account no", "account"] },
+          { "name": "Pay", "action": "click", "texts": ["pay", "lipa na m-pesa"], "optional": true },
+          { "name": "Pay Bill", "action": "click", "texts": ["pay bill", "paybill"] },
+          { "name": "Business number", "action": "input", "value": "number", "texts": ["business number", "enter business number", "business no", "paybill number", "search"] },
+          { "name": "Continue after business number", "action": "press", "texts": ["continue", "next"], "optional": true },
+          { "name": "Account number", "action": "input", "value": "account", "texts": ["account number", "enter account number", "account no", "account"] },
           { "name": "Continue after account", "action": "press", "texts": ["continue", "next"], "optional": true },
           { "name": "Amount screen", "action": "await_amount" }
         ],
         "TILL": [
-          { "name": "Pay", "action": "click", "texts": ["pay", "lipa na m-pesa"] },
-          { "name": "Buy Goods / Till", "action": "click", "texts": ["buy goods", "buy goods and services", "till", "till number"] },
-          { "name": "Till number", "action": "input", "value": "number", "texts": ["till number", "till no", "enter till number", "till"] },
+          { "name": "Pay", "action": "click", "texts": ["pay", "lipa na m-pesa"], "optional": true },
+          { "name": "Buy Goods", "action": "click", "texts": ["buy goods", "buy goods and services", "till"] },
+          { "name": "Till number", "action": "input", "value": "number", "texts": ["till number", "enter till number", "till no", "search", "till"] },
           { "name": "Continue after till", "action": "press", "texts": ["continue", "next"], "optional": true },
           { "name": "Amount screen", "action": "await_amount" }
         ],
         "POCHI": [
-          { "name": "Pay", "action": "click", "texts": ["pay", "lipa na m-pesa"] },
+          { "name": "Pay", "action": "click", "texts": ["pay", "lipa na m-pesa"], "optional": true },
           { "name": "Pochi la Biashara", "action": "click", "texts": ["pochi la biashara", "pochi"] },
-          { "name": "Phone number", "action": "input", "value": "number", "texts": ["phone number", "enter phone number", "mobile number", "phone"] },
+          { "name": "Phone number", "action": "input", "value": "number", "texts": ["phone number", "enter phone number", "mobile number", "search", "phone"] },
           { "name": "Continue after number", "action": "press", "texts": ["continue", "next"], "optional": true },
           { "name": "Amount screen", "action": "await_amount" }
         ]
       }
     },
 
-    "MY_SAFARICOM": {
-      "_comment": "APPROXIMATE. M-PESA tab first, then the same sequences.",
-      "packages": ["com.safaricom.mysafaricom"],
-      "clearTask": true,
+    "ONE_APP": {
+      "_comment": "Safaricom One App (formerly My Safaricom). APPROXIMATE - verify the package with adb or pick the app in Settings > Apps used, then tune with Debug mode.",
+      "packages": ["com.safaricom.mysafaricom", "com.safaricom.oneapp"],
+      "clearTask": false,
+      "loginWaitSeconds": 45,
       "flows": {
         "SEND_MONEY": [
-          { "name": "M-PESA tab", "action": "click", "texts": ["m-pesa", "mpesa"] },
+          { "name": "M-PESA tab", "action": "click", "texts": ["m-pesa", "mpesa"], "optional": true },
           { "name": "Send Money", "action": "click", "texts": ["send money", "send and request", "send & request"] },
-          { "name": "Enter phone number", "action": "input", "value": "number", "texts": ["phone number", "enter phone number", "mobile number", "phone"] },
+          { "name": "Enter phone number", "action": "input", "value": "number", "texts": ["enter phone number", "phone number", "mobile number", "search", "phone"] },
           { "name": "Continue after number", "action": "press", "texts": ["continue", "next"], "optional": true },
           { "name": "Amount screen", "action": "await_amount" }
         ],
         "PAYBILL": [
-          { "name": "M-PESA tab", "action": "click", "texts": ["m-pesa", "mpesa"] },
+          { "name": "M-PESA tab", "action": "click", "texts": ["m-pesa", "mpesa"], "optional": true },
           { "name": "Lipa na M-PESA / Pay", "action": "click", "texts": ["lipa na m-pesa", "lipa na mpesa", "pay"], "optional": true },
-          { "name": "Paybill", "action": "click", "texts": ["paybill", "pay bill"] },
-          { "name": "Business number", "action": "input", "value": "number", "texts": ["business number", "business no", "paybill number"] },
-          { "name": "Continue after business no.", "action": "press", "texts": ["continue", "next"], "optional": true },
-          { "name": "Account number", "action": "input", "value": "account", "texts": ["account number", "account no", "account"] },
+          { "name": "Pay Bill", "action": "click", "texts": ["pay bill", "paybill"] },
+          { "name": "Business number", "action": "input", "value": "number", "texts": ["business number", "enter business number", "business no", "paybill number"] },
+          { "name": "Continue after business number", "action": "press", "texts": ["continue", "next"], "optional": true },
+          { "name": "Account number", "action": "input", "value": "account", "texts": ["account number", "enter account number", "account no", "account"] },
           { "name": "Continue after account", "action": "press", "texts": ["continue", "next"], "optional": true },
           { "name": "Amount screen", "action": "await_amount" }
         ],
         "TILL": [
-          { "name": "M-PESA tab", "action": "click", "texts": ["m-pesa", "mpesa"] },
+          { "name": "M-PESA tab", "action": "click", "texts": ["m-pesa", "mpesa"], "optional": true },
           { "name": "Lipa na M-PESA / Pay", "action": "click", "texts": ["lipa na m-pesa", "lipa na mpesa", "pay"], "optional": true },
-          { "name": "Buy Goods / Till", "action": "click", "texts": ["buy goods", "buy goods and services", "till"] },
-          { "name": "Till number", "action": "input", "value": "number", "texts": ["till number", "till no", "till"] },
+          { "name": "Buy Goods", "action": "click", "texts": ["buy goods", "buy goods and services", "till"] },
+          { "name": "Till number", "action": "input", "value": "number", "texts": ["till number", "enter till number", "till no", "till"] },
           { "name": "Continue after till", "action": "press", "texts": ["continue", "next"], "optional": true },
           { "name": "Amount screen", "action": "await_amount" }
         ],
         "POCHI": [
-          { "name": "M-PESA tab", "action": "click", "texts": ["m-pesa", "mpesa"] },
+          { "name": "M-PESA tab", "action": "click", "texts": ["m-pesa", "mpesa"], "optional": true },
           { "name": "Lipa na M-PESA / Pay", "action": "click", "texts": ["lipa na m-pesa", "lipa na mpesa", "pay"], "optional": true },
           { "name": "Pochi la Biashara", "action": "click", "texts": ["pochi la biashara", "pochi"] },
-          { "name": "Phone number", "action": "input", "value": "number", "texts": ["phone number", "mobile number", "phone"] },
+          { "name": "Phone number", "action": "input", "value": "number", "texts": ["phone number", "enter phone number", "mobile number", "phone"] },
           { "name": "Continue after number", "action": "press", "texts": ["continue", "next"], "optional": true },
           { "name": "Amount screen", "action": "await_amount" }
         ]

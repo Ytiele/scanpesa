@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +62,9 @@ import com.scanpesa.app.ui.AppViewModel
 import com.scanpesa.app.ui.BigButton
 import com.scanpesa.app.ui.BigOutlinedButton
 import com.scanpesa.app.ui.Green
+import com.scanpesa.app.ui.GreenLight
+import com.scanpesa.app.ui.SectionCard
+import androidx.compose.ui.text.font.FontWeight
 import com.scanpesa.app.ui.ScreenTopBar
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -73,7 +78,10 @@ fun ScanScreen(vm: AppViewModel, onDetected: () -> Unit, onManual: () -> Unit, o
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
 
     Scaffold(topBar = { ScreenTopBar("Scan", onBack) }) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(
+            Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
             if (!granted) {
                 Text("ScanPesa needs the camera to read M-PESA numbers. Text is read on the phone, offline.")
                 BigButton("Allow camera", onClick = { launcher.launch(Manifest.permission.CAMERA) })
@@ -93,14 +101,27 @@ private fun CameraScanner(vm: AppViewModel, onDetected: () -> Unit, onManual: ()
     var camera by remember { mutableStateOf<Camera?>(null) }
     var torchOn by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Point at the Paybill, Till or phone number") }
+    var live by remember { mutableStateOf<List<Candidate>>(emptyList()) }
+    val doneFlag = remember { AtomicBoolean(false) }
+    val providerFuture = remember { ProcessCameraProvider.getInstance(ctx) }
+
+    fun accept(found: List<Candidate>) {
+        if (!doneFlag.compareAndSet(false, true)) return
+        val frame = previewView.bitmap
+        runCatching { providerFuture.get().unbindAll() } // freeze
+        if (vm.prefs.vibrateOnDetect) vibrate(ctx)
+        vm.onScanned(found, frame)
+        onDetected()
+    }
 
     DisposableEffect(lifecycleOwner) {
         val executor = Executors.newSingleThreadExecutor()
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        val done = AtomicBoolean(false)
+        val done = doneFlag
         val busy = AtomicBoolean(false)
-        var lastKey: String? = null
-        val providerFuture = ProcessCameraProvider.getInstance(ctx)
+        // Recent frame results. Handwriting OCR flickers, so a result counts once it was seen in
+        // 2 of the last 8 frames (not necessarily consecutive).
+        val recent = ArrayDeque<String>()
         val main = ContextCompat.getMainExecutor(ctx)
 
         @androidx.annotation.OptIn(ExperimentalGetImage::class)
@@ -111,20 +132,17 @@ private fun CameraScanner(vm: AppViewModel, onDetected: () -> Unit, onManual: ()
             recognizer.process(image)
                 .addOnSuccessListener { result ->
                     val found: List<Candidate> = MpesaParser.parse(result.text)
-                    if (found.isEmpty()) { lastKey = null; return@addOnSuccessListener }
-                    val key = found.joinToString(";") { it.key }
-                    // Require the same result in two consecutive frames to avoid OCR flicker.
-                    if (key == lastKey && done.compareAndSet(false, true)) {
-                        main.execute {
-                            val frame = previewView.bitmap
-                            providerFuture.get().unbindAll() // freeze
-                            if (vm.prefs.vibrateOnDetect) vibrate(ctx)
-                            vm.onScanned(found, frame)
-                            onDetected()
-                        }
+                    val key = if (found.isEmpty()) "" else found.joinToString(";") { it.key }
+                    recent.addLast(key)
+                    while (recent.size > 8) recent.removeFirst()
+                    if (found.isEmpty()) return@addOnSuccessListener
+                    if (recent.count { it == key } >= 2) {
+                        main.execute { accept(found) }
                     } else {
-                        lastKey = key
-                        main.execute { status = "Reading… hold steady" }
+                        main.execute {
+                            live = found
+                            status = "Reading… hold steady, or tap Use this"
+                        }
                     }
                 }
                 .addOnCompleteListener { busy.set(false); proxy.close() }
@@ -159,6 +177,14 @@ private fun CameraScanner(vm: AppViewModel, onDetected: () -> Unit, onManual: ()
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .background(Color(0x99000000)).padding(10.dp),
         )
+    }
+    if (live.isNotEmpty()) {
+        SectionCard(container = GreenLight) {
+            Text("Seen: " + live.joinToString("  ·  ") { c ->
+                (if (c.typeConfirmed) c.type.label else "Phone") + " " + c.number + (c.account?.let { " / $it" } ?: "")
+            }, fontWeight = FontWeight.SemiBold, color = Color(0xFF1B1B1B))
+            BigButton("Use this", onClick = { accept(live) })
+        }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         val hasFlash = camera?.cameraInfo?.hasFlashUnit() == true

@@ -12,7 +12,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import com.scanpesa.app.automation.ScanPesaAccessibilityService
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -50,19 +57,32 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onDebug: () -> Unit) {
     var taps by remember { mutableIntStateOf(0) }
     var hasOverride by remember { mutableStateOf(FlowRepository.hasOverride(ctx)) }
     var showDisclosure by remember { mutableStateOf(false) }
+    var resolved by remember { mutableStateOf(Target.entries.associateWith { TargetLauncher.resolvePackage(ctx, it, prefs.simSlot) }) }
+    var picking by remember { mutableStateOf<Target?>(null) }
+    fun refreshApps() {
+        resolved = Target.entries.associateWith { TargetLauncher.resolvePackage(ctx, it, prefs.simSlot) }
+        ScanPesaAccessibilityService.instance?.refreshWatched()
+    }
 
     val importer = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val text = runCatching { ctx.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() } }.getOrNull()
         val err = if (text == null) "Could not read the file" else FlowRepository.importOverride(ctx, text)
         hasOverride = FlowRepository.hasOverride(ctx)
-        Toast.makeText(ctx, err ?: "Flows imported. Turn the accessibility service off and on to apply package changes.", Toast.LENGTH_LONG).show()
+        refreshApps()
+        Toast.makeText(ctx, err ?: "Flows imported.", Toast.LENGTH_LONG).show()
     }
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         runCatching {
             ctx.contentResolver.openOutputStream(uri)!!.use { it.write(FlowRepository.bundledJson(ctx).toByteArray()) }
         }.onSuccess { Toast.makeText(ctx, "Saved built-in flows.json", Toast.LENGTH_SHORT).show() }
+    }
+
+    picking?.let { t ->
+        AppPickerDialog(t, onPick = { pkg ->
+            prefs.setPackageOverride(t, pkg); picking = null; refreshApps()
+        }, onDismiss = { picking = null })
     }
 
     Scaffold(topBar = { ScreenTopBar("Settings", onBack) }) { pad ->
@@ -80,8 +100,27 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onDebug: () -> Unit) {
             SectionCard {
                 Text("SIM Toolkit: SIM slot", style = MaterialTheme.typography.titleMedium)
                 Text("On dual-SIM phones, pick the slot with your Safaricom line.", style = MaterialTheme.typography.bodyMedium)
-                RadioRow(sim == 1, "SIM 1") { sim = 1; prefs.simSlot = 1 }
-                RadioRow(sim == 2, "SIM 2") { sim = 2; prefs.simSlot = 2 }
+                RadioRow(sim == 1, "SIM 1") { sim = 1; prefs.simSlot = 1; refreshApps() }
+                RadioRow(sim == 2, "SIM 2") { sim = 2; prefs.simSlot = 2; refreshApps() }
+            }
+            SectionCard {
+                Text("Apps used", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "If Go opens the wrong app (or says it isn't installed), pick the right one here.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Target.entries.forEach { t ->
+                    val pkg = resolved[t]
+                    val custom = prefs.packageOverride(t) != null
+                    Column(Modifier.fillMaxWidth().clickable { picking = t }.padding(vertical = 6.dp)) {
+                        Text(t.label, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            (pkg ?: "Not found on this phone") + (if (custom) "  (chosen by you)" else "") + "  · tap to change",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (pkg == null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
             SectionCard {
                 SwitchRow("Vibrate when details are found", vibrate) { vibrate = it; prefs.vibrateOnDetect = it }
@@ -112,7 +151,7 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onDebug: () -> Unit) {
                     Text("Debug", style = MaterialTheme.typography.titleMedium)
                     SwitchRow("Debug mode: dump screens of the target apps", debug) { debug = it; prefs.debugMode = it }
                     Text(
-                        "Writes the on-screen labels of the M-PESA app, SIM Toolkit and My Safaricom to logcat (tag ScanPesaDump) " +
+                        "Writes the on-screen labels of the M-PESA app, SIM Toolkit and One App to logcat (tag ScanPesaDump) " +
                             "and to the Debug screen. PIN/password fields are never included.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -132,6 +171,38 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit, onDebug: () -> Unit) {
             )
         }
     }
+}
+
+@Composable
+private fun AppPickerDialog(target: Target, onPick: (String?) -> Unit, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val apps = remember { TargetLauncher.launchableApps(ctx) }
+    var query by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("App for ${target.label}") },
+        text = {
+            Column {
+                OutlinedTextField(query, { query = it }, label = { Text("Search apps") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                LazyColumn(Modifier.heightIn(max = 380.dp)) {
+                    item {
+                        Text(
+                            "Automatic (from flows.json)",
+                            Modifier.fillMaxWidth().clickable { onPick(null) }.padding(vertical = 12.dp),
+                            fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    items(apps.filter { query.isBlank() || it.label.contains(query, true) || it.packageName.contains(query, true) }) { a ->
+                        Column(Modifier.fillMaxWidth().clickable { onPick(a.packageName) }.padding(vertical = 8.dp)) {
+                            Text(a.label, fontWeight = FontWeight.SemiBold)
+                            Text(a.packageName, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

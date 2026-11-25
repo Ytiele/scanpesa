@@ -1,6 +1,6 @@
 # ScanPesa
 
-ScanPesa reads M-PESA payment details from signs, stickers and receipts with the camera. It works out whether they are **Send Money**, **Paybill**, **Till (Buy Goods)** or **Pochi la Biashara**. Then it opens the app you pick (M-PESA app, SIM Toolkit or My Safaricom), goes to the right screen and types the numbers in.
+ScanPesa reads M-PESA payment details from signs, stickers and receipts with the camera. It works out whether they are **Send Money**, **Paybill**, **Till (Buy Goods)** or **Pochi la Biashara**. Then it opens the app you pick (M-PESA app, SIM Toolkit or One App), goes to the right screen and types the numbers in.
 
 **It always stops before the amount. You type the amount and PIN yourself.**
 
@@ -50,12 +50,14 @@ The first time you open ScanPesa, it asks for the camera and then explains the a
 
 On Android 13 and later, sideloaded apps can't turn on accessibility until you allow it. If the switch is greyed out ("Restricted setting"), go to **Settings › Apps › ScanPesa**, tap **⋮ › Allow restricted settings**, then try again.
 
-The home screen shows **Auto-fill is ON/OFF**.
+The home screen shows **Auto-fill is ON / OFF / ON but not running**. "Not running" means your phone's battery saver stopped the service (common on Tecno, Infinix, itel and Xiaomi phones). Switch it OFF and ON again, and set **App info › Battery › Unrestricted** for ScanPesa.
+
+After each Go, the home screen shows **Last auto-fill**: either done, or the step where it stopped and why. Tap **Show steps** and then **Share this log** to send it to whoever is tuning the flows.
 
 ### Accessibility disclosure (shown in the app, as Google Play requires)
 
 > **How ScanPesa uses Accessibility**
-> - **What it does:** When you tap Go, ScanPesa opens the app you picked (M-PESA app, SIM Toolkit or My Safaricom). It taps the menu items for you and types in only the phone, paybill, account or till number you just confirmed.
+> - **What it does:** When you tap Go, ScanPesa opens the app you picked (M-PESA app, SIM Toolkit or One App). It taps the menu items for you and types in only the phone, paybill, account or till number you just confirmed.
 > - **Where it stops:** It stops as soon as the amount screen appears. You always type the amount and your PIN yourself.
 > - **What it never does:** It never reads, stores or types your PIN or any password field. It never types an amount. It never presses Send, Pay or Confirm.
 > - **Which apps:** It only works inside those three Safaricom/SIM apps, and only for up to 20 seconds after you tap Go. Then it stops and tells you which step it reached.
@@ -69,7 +71,7 @@ The flows assume these packages:
 | Target | Assumed package |
 |---|---|
 | M-PESA app | `com.safaricom.mpesa.lifestyle` |
-| My Safaricom | `com.safaricom.mysafaricom` |
+| One App | `com.safaricom.mysafaricom` |
 | SIM Toolkit | `com.android.stk` (SIM 2 on some dual-SIM phones: `com.android.stk2`) |
 
 Check them on **your** phone:
@@ -95,6 +97,8 @@ To find which package is on screen right now, open the app on the phone and run:
 ```bash
 adb shell dumpsys window | grep -E "mCurrentFocus|mFocusedApp"
 ```
+**No adb?** Open **Settings › Apps used** in ScanPesa. It shows which app each target opens, and you can pick a different one from a list of installed apps (Safaricom/SIM apps are listed first).
+
 Some phones use their own SIM Toolkit package (for example `com.sec.android.app.stk` or `com.mediatek.stk`). If a name differs, edit `packages` / `packagesSim2` in `flows.json` (see below). The service watches only the packages listed there. After you import a new file, turn the service off and on again.
 
 ## 5. Fix a flow with Debug mode when Safaricom changes its menus
@@ -120,9 +124,9 @@ Matching ignores case, punctuation and leading menu numbers ("2. Send Money" mat
 
 **Tuning steps:**
 
-1. Open **Settings** and tap the **"ScanPesa 1.0.0"** line at the bottom 7 times. Debug options appear.
+1. Open **Settings** and tap the **"ScanPesa 1.1.0"** line at the bottom 7 times. Debug options appear.
 2. Turn on **Debug mode**.
-3. Open the M-PESA app, SIM Toolkit or My Safaricom yourself and go through the menus by hand.
+3. Open the M-PESA app, SIM Toolkit or One App yourself and go through the menus by hand.
 4. Each screen is dumped as lines like:
    ```
    LinearLayout {click}
@@ -139,7 +143,9 @@ Matching ignores case, punctuation and leading menu numbers ("2. Send Money" mat
    - **Rebuild:** edit `app/src/main/assets/flows.json` and reinstall.
 6. Run a scan with **Go**. When a job fails, a notification names the step, for example *Auto-fill stopped: Pay Bill — Could not find "pay bill" / "paybill" on screen*. The Debug screen's **Automation log** shows every step that passed.
 
-Timeouts: `jobTimeoutSeconds` (20) is the whole job. `stepTimeoutSeconds` (8) is how long one step may wait for its screen. If the M-PESA app shows its login PIN first, ScanPesa waits for you to unlock it (within the 20 seconds) and never touches the PIN field.
+Per-target options: `clearTask` (restart the app at its home screen; true for SIM Toolkit, false for the M-PESA app and One App so you stay logged in) and `loginWaitSeconds` (45 for the M-PESA app and One App: time for you to unlock the app. ScanPesa types nothing during it).
+
+Timeouts: `jobTimeoutSeconds` (20) is the whole job, plus the login wait. `stepTimeoutSeconds` (8) is how long one step may wait for its screen. If the M-PESA app shows its login PIN first, ScanPesa waits for you to unlock it (within the 20 seconds) and never touches the PIN field.
 
 ## Safety design
 

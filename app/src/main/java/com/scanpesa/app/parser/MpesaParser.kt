@@ -14,7 +14,11 @@ object MpesaParser {
     /** How far a number may sit before a keyword ("247247 paybill"). */
     private const val BEFORE_WINDOW = 18
 
-    private val CONFUSABLES = mapOf('o' to '0', 'i' to '1', 'l' to '1', '|' to '1', 's' to '5', 'b' to '8')
+    /** Letters OCR (especially of handwriting) reads instead of digits. Only applied inside digit runs. */
+    private val CONFUSABLES = mapOf(
+        'o' to '0', 'i' to '1', 'l' to '1', '|' to '1', 's' to '5', 'b' to '8',
+        'z' to '2', 'g' to '9', 'q' to '9', 't' to '7',
+    )
 
     private val PAYBILL_KW = Regex(
         """pay\s*-?\s*b[il1|][l1|]{2}|business\s*(?:n[o0]\.?|number|num|#)|biz\s*(?:n[o0]|number)|\bp\.?b\b"""
@@ -28,7 +32,12 @@ object MpesaParser {
     private val ACCOUNT_RE = Regex(
         """(?:\baccount|\bacct|\bacc|\ba/c)(?![a-mo-z])\.?\s*(?:n[o0]\.?|number|num|#)?\s*[:#.\-=]?\s*([a-z0-9][a-z0-9\-]{0,23})"""
     )
-    private val ACCOUNT_STOPWORDS = setOf("no", "n0", "number", "num", "name")
+    private val ACCOUNT_STOPWORDS = setOf("no", "n0", "number", "num", "name", "names")
+
+    /** "Business name: Mama Mboga Shop" is never used as the account (or anything else). */
+    private val BUSINESS_NAME_RE = Regex(
+        """(?:business|biz|shop|company|merchant|account)\s*name\s*[:#.\-=]?\s*([^\n]*)"""
+    )
 
     private val PHONE_RE = Regex("""(?<![\d+])(?:\+?254|0)([17]\d{8})(?!\d)""")
     private val BUSINESS_NUM_RE = Regex("""(?<!\d)\d{5,7}(?!\d)""")
@@ -67,8 +76,11 @@ object MpesaParser {
 
     /** "+254 722 123 456", "0722-123-456", "254 7 2 2 ..." -> "0722123456". */
     private fun joinPhones(text: String): String {
-        val spaced = Regex("""(?<![\d+])(?:\+\s?254|254|0)[ \-]?([17](?:[ \-]?\d){8})(?![\d])""")
-        return spaced.replace(text) { m -> "0" + m.groupValues[1].filter { it.isDigit() } }
+        val spaced = Regex("""(?<![\d+])(?:\+\s?254|254|0)[ \-./]?([17](?:[ \-./]?\d){8})(?![\d])""")
+        val joined = spaced.replace(text) { m -> "0" + m.groupValues[1].filter { it.isDigit() } }
+        // Handwritten numbers often drop the leading 0: "722 123 456" -> "0722123456".
+        val noZero = Regex("""(?<![\d+.])(7(?:[ \-./]?\d){8})(?![\d])""")
+        return noZero.replace(joined) { m -> "0" + m.groupValues[1].filter { it.isDigit() } }
     }
 
     /**
@@ -113,10 +125,18 @@ object MpesaParser {
             .filter { n -> phoneSpans.none { n.start in it } }
             .toList()
 
+        // Business/shop name text is never an account.
+        val nameMatches = BUSINESS_NAME_RE.findAll(text).toList()
+        val nameSpans = nameMatches.map { it.range }
+        val nameWords = nameMatches.flatMap { it.groupValues[1].split(' ') }.filter { it.length > 1 }.toSet()
+
         // Account values (so they are not re-used as phones / tills)
         val accounts = ACCOUNT_RE.findAll(text).mapNotNull { m ->
             val v = m.groupValues[1].trim('-')
+            val valueStart = m.groups[1]!!.range.first
             if (v.isEmpty() || v in ACCOUNT_STOPWORDS) null
+            else if (nameSpans.any { valueStart in it }) null
+            else if (v in nameWords && v.none { it.isDigit() }) null
             else Triple(m.range.first, m.groups[1]!!.range, v)
         }.toList()
         val accountSpans = accounts.map { it.second }

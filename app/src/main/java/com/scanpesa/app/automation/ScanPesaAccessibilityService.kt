@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Types the confirmed number/account into the M-PESA app, SIM Toolkit or My Safaricom, then
+ * Types the confirmed number/account into the M-PESA app, SIM Toolkit or One App, then
  * stops so the user enters the amount and PIN. See FlowEngine for the safety rules.
  * Watches ONLY the packages listed in flows.json.
  */
@@ -30,17 +30,24 @@ class ScanPesaAccessibilityService : AccessibilityService() {
     private var lastDumpSignature = 0
 
     private val tickRunnable = Runnable { tick() }
+    private var jobPackages: Set<String> = emptySet()
+    private var unlockHintShown = false
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         prefs = Prefs(this)
         instance = this
         _connected.value = true
-        val cfg = runCatching { FlowRepository.get(this) }.getOrNull()
-        watched = cfg?.allPackages ?: DEFAULT_PACKAGES
-        serviceInfo = serviceInfo.apply { packageNames = watched.toTypedArray() }
-        DebugLog.event("Service connected; watching ${watched.joinToString()}")
+        refreshWatched()
         if (JobStore.current != null) scheduleTick(300)
+    }
+
+    /** Re-reads flows.json + Settings overrides and watches exactly those packages. */
+    fun refreshWatched() {
+        val cfg = runCatching { FlowRepository.get(this) }.getOrNull()
+        watched = (cfg?.allPackages ?: DEFAULT_PACKAGES) + prefs.allPackageOverrides
+        serviceInfo = serviceInfo.apply { packageNames = watched.toTypedArray() }
+        DebugLog.event("Watching ${watched.joinToString()}")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -67,12 +74,17 @@ class ScanPesaAccessibilityService : AccessibilityService() {
         handler.postDelayed(tickRunnable, delay)
     }
 
-    private fun rootFor(pkg: String): AccessibilityNodeInfo? {
-        rootInActiveWindow?.let { if (it.packageName?.toString() == pkg) return it }
+    private fun rootFor(pkg: String): AccessibilityNodeInfo? = rootFor(setOf(pkg))
+
+    /** Root of the active window if it belongs to one of [pkgs], else of any window that does. */
+    private fun rootFor(pkgs: Set<String>): AccessibilityNodeInfo? {
+        rootInActiveWindow?.let { if (it.packageName?.toString() in pkgs) return it }
         return runCatching {
-            windows.mapNotNull { it.root }.firstOrNull { it.packageName?.toString() == pkg }
+            windows.mapNotNull { it.root }.firstOrNull { it.packageName?.toString() in pkgs }
         }.getOrNull()
     }
+
+    private fun activePackage(): String? = runCatching { rootInActiveWindow?.packageName?.toString() }.getOrNull()
 
     private fun tick() {
         val job = JobStore.current ?: run { engine = null; return }
@@ -84,17 +96,31 @@ class ScanPesaAccessibilityService : AccessibilityService() {
                 finish(job, Outcome.Failed("setup", "No flow for ${job.type.label} in ${job.target.label} (flows.json)"))
                 return
             }
+            val loginWait = (cfg.targets[job.target]?.loginWaitSeconds ?: 0) * 1000L
             engine = FlowEngine(
                 steps, JobValues(job.number, job.account), cfg, job.createdAt,
                 placeholders = mapOf("SIM" to prefs.simSlot.toString()),
+                loginWaitMs = loginWait,
             )
             engineJobId = job.id
+            jobPackages = TargetLauncher.packagesFor(this, job.target) + job.packageName
+            unlockHintShown = loginWait == 0L
             DebugLog.event("Job ${job.type.label} → ${job.target.label} (${job.packageName}) started")
         }
         val e = engine!!
         val before = e.currentStepName
         val outcome = try {
-            e.tick(rootFor(job.packageName)?.let(::AndroidNode), now)
+            val root = rootFor(jobPackages)
+            val why = if (root == null) {
+                val seen = activePackage()
+                "ScanPesa could not see ${job.target.label} on screen" +
+                    (if (seen != null) " (it saw $seen; pick the right app in Settings > Apps used)" else "")
+            } else null
+            if (!unlockHintShown && !e.hasActed && now - job.createdAt > 4000) {
+                unlockHintShown = true
+                toast("Unlock ${job.target.label} if asked. ScanPesa will continue.", long = false)
+            }
+            e.tick(root?.let(::AndroidNode), now, why)
         } catch (t: Throwable) {
             Outcome.Failed(e.currentStepName, "Internal error: ${t.javaClass.simpleName}")
         }
@@ -111,11 +137,15 @@ class ScanPesaAccessibilityService : AccessibilityService() {
         handler.removeCallbacks(tickRunnable)
         when (outcome) {
             is Outcome.Done -> {
+                prefs.lastResult = Prefs.LastResult(true, outcome.message, "${job.target.label}: entered ${describe(job)}", System.currentTimeMillis())
                 DebugLog.event("DONE: ${outcome.message}")
                 toast(outcome.message, long = true)
                 Notifier.show(this, outcome.message, "ScanPesa entered ${describe(job)}. Now type the amount and your PIN yourself.")
             }
             is Outcome.Failed -> {
+                prefs.lastResult = Prefs.LastResult(
+                    false, "Stopped at \"${outcome.step}\" (${job.target.label})", outcome.reason, System.currentTimeMillis(),
+                )
                 DebugLog.event("FAILED at \"${outcome.step}\": ${outcome.reason}")
                 toast("ScanPesa stopped at \"${outcome.step}\"", long = true)
                 Notifier.show(

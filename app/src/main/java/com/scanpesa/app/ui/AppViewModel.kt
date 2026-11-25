@@ -34,8 +34,11 @@ data class Draft(
 sealed interface GoResult {
     data object Launched : GoResult
     data class Error(val message: String) : GoResult
-    /** Accessibility service is off; the UI offers to enable it or open the app without auto-fill. */
-    data object NeedsService : GoResult
+    /**
+     * Accessibility service is off (or switched on but killed by the phone); the UI offers to fix
+     * it or open the app without auto-fill.
+     */
+    data class NeedsService(val enabledButNotRunning: Boolean) : GoResult
 }
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -89,7 +92,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val tried = FlowRepository.get(ctx).targets[target]?.let { it.packages + it.packagesSim2 }?.distinct()?.joinToString()
             return GoResult.Error("${target.label} was not found on this phone (looked for: $tried). Check the package name in flows.json.")
         }
-        if (autofill && !TargetLauncher.isServiceEnabled(ctx)) return GoResult.NeedsService
+        if (autofill) {
+            val enabled = TargetLauncher.isServiceEnabled(ctx)
+            if (!enabled || ScanPesaAccessibilityService.instance == null) {
+                return GoResult.NeedsService(enabledButNotRunning = enabled)
+            }
+        }
 
         prefs.lastTarget = target
         val now = System.currentTimeMillis()

@@ -41,4 +41,27 @@ class Prefs(context: Context) {
     var debugMode: Boolean
         get() = sp.getBoolean("debug_mode", false)
         set(v) = sp.edit().putBoolean("debug_mode", v).apply()
+
+    /** Package chosen in Settings > Apps used; overrides flows.json. Null = automatic. */
+    fun packageOverride(target: Target): String? = sp.getString("pkg_${target.name}", null)
+
+    fun setPackageOverride(target: Target, pkg: String?) = sp.edit().putString("pkg_${target.name}", pkg).apply()
+
+    val allPackageOverrides: Set<String>
+        get() = Target.entries.mapNotNull { packageOverride(it) }.toSet()
+
+    /** Result of the last auto-fill job, shown on the home screen. */
+    data class LastResult(val ok: Boolean, val title: String, val detail: String, val time: Long)
+
+    var lastResult: LastResult?
+        get() {
+            val title = sp.getString("last_title", null) ?: return null
+            return LastResult(sp.getBoolean("last_ok", false), title, sp.getString("last_detail", "").orEmpty(), sp.getLong("last_time", 0))
+        }
+        set(v) {
+            sp.edit().apply {
+                if (v == null) remove("last_title")
+                else putBoolean("last_ok", v.ok).putString("last_title", v.title).putString("last_detail", v.detail).putLong("last_time", v.time)
+            }.apply()
+        }
 }

@@ -201,6 +201,53 @@ class MpesaParserTest {
         assertEquals(1, r.size)
     }
 
+    // ---------------------------------------------------------------- handwriting
+
+    @Test fun hand01_dotsAsSeparators() {
+        assertEquals("0722123456", only("0722.123.456").number)
+    }
+
+    @Test fun hand02_handwrittenLettersForDigits() {
+        // z->2, g->9, q->9, t->7 inside digit runs
+        assertEquals("0722193476", only("O7z2 1g3 4t6").number)
+    }
+
+    @Test fun hand03_missingLeadingZero() {
+        val c = only("Mama Njeri\n722 123 456")
+        assertEquals("0722123456", c.number)
+        assertFalse(c.typeConfirmed)
+    }
+
+    @Test fun hand04_irregularSpacingAndNewWords() {
+        assertEquals("0798765432", only("call me 07 98 76 54 32 asante").number)
+    }
+
+    @Test fun hand05_wordsWithTandGAreUntouched() {
+        assertEquals("till 123456 tag", MpesaParser.normalize("Till 123456 tag"))
+    }
+
+    // ---------------------------------------------------------------- business name is never the account
+
+    @Test fun name01_businessNameIgnoredAccountNumberUsed() {
+        val c = only("PAYBILL 247247\nBUSINESS NAME: MAMA MBOGA SHOP\nACCOUNT NO: 556677")
+        assertCandidate(c, PAYBILL, "247247", "556677")
+    }
+
+    @Test fun name02_onlyBusinessNameMeansNoAccount() {
+        val c = only("Paybill 400200\nBusiness Name: Kamau Hardware")
+        assertCandidate(c, PAYBILL, "400200", null)
+    }
+
+    @Test fun name03_accountNameLineIsNotTheAccount() {
+        val c = only("Paybill 522522\nAccount Name: JOHN KAMAU\nAccount No: 1234567")
+        assertCandidate(c, PAYBILL, "522522", "1234567")
+    }
+
+    @Test fun name04_accountThatRepeatsTheBusinessNameIsIgnored() {
+        val c = only("Business name: Juja Traders\nPaybill 333222 Account: Juja")
+        assertCandidate(c, PAYBILL, "333222", null)
+    }
+
     // ---------------------------------------------------------------- validator
 
     @Test fun validator_phoneForms() {
