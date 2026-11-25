@@ -1,0 +1,179 @@
+package com.scanpesa.app.parser
+
+import com.scanpesa.app.model.Candidate
+import com.scanpesa.app.model.PaymentType
+
+/**
+ * Pure-Kotlin parser that turns (messy) OCR text from signs, stickers and receipts into M-PESA
+ * payment candidates. No Android dependencies, so it is fully unit-tested on the JVM.
+ */
+object MpesaParser {
+
+    /** How far (in characters of normalised text) a number may sit after a keyword. */
+    private const val AFTER_WINDOW = 45
+    /** How far a number may sit before a keyword ("247247 paybill"). */
+    private const val BEFORE_WINDOW = 18
+
+    private val CONFUSABLES = mapOf('o' to '0', 'i' to '1', 'l' to '1', '|' to '1', 's' to '5', 'b' to '8')
+
+    private val PAYBILL_KW = Regex(
+        """pay\s*-?\s*b[il1|][l1|]{2}|business\s*(?:n[o0]\.?|number|num|#)|biz\s*(?:n[o0]|number)|\bp\.?b\b"""
+    )
+    private val TILL_KW = Regex("""\bt[il1|][l1|]{2}\b|buy\s*goods""")
+    private val LIPA_KW = Regex("""lipa\s*na\s*m\s*-?\s*pesa""")
+    private val POCHI_KW = Regex("""pochi""")
+    private val SEND_KW = Regex("""send\s*money|tuma\s*pesa""")
+
+    /** Account keyword followed by its value (value may be alphanumeric, may contain a dash). */
+    private val ACCOUNT_RE = Regex(
+        """(?:\baccount|\bacct|\bacc|\ba/c)(?![a-mo-z])\.?\s*(?:n[o0]\.?|number|num|#)?\s*[:#.\-=]?\s*([a-z0-9][a-z0-9\-]{0,23})"""
+    )
+    private val ACCOUNT_STOPWORDS = setOf("no", "n0", "number", "num", "name")
+
+    private val PHONE_RE = Regex("""(?<![\d+])(?:\+?254|0)([17]\d{8})(?!\d)""")
+    private val BUSINESS_NUM_RE = Regex("""(?<!\d)\d{5,7}(?!\d)""")
+
+    // ------------------------------------------------------------------ normalisation
+
+    /**
+     * Lowercase, fix OCR letter/digit confusions inside digit runs, collapse whitespace and join
+     * digit groups that were split by spaces or dashes ("0722 123 456" -> "0722123456").
+     */
+    fun normalize(raw: String): String {
+        var t = raw.lowercase()
+            .replace('–', '-').replace('—', '-')
+            .replace(Regex("""[\r\n\t]+"""), " \n ")
+        t = fixConfusables(t)
+        // Drop OCR junk characters (after the digit fixes, which may use '|').
+        t = t.replace(Regex("""[^a-z0-9+/\-.:#&'\n ]"""), " ")
+        t = t.replace(Regex("""[  ]+"""), " ")
+        t = joinPhones(t)
+        t = joinDigitGroups(t)
+        return t.replace(Regex("""\s*\n\s*"""), "\n").replace(Regex(" +"), " ").trim()
+    }
+
+    /** Replace O/I/l/S/B in tokens that consist only of digits and confusable letters (mostly digits). */
+    private fun fixConfusables(text: String): String {
+        val token = Regex("""[a-z0-9|]+""")
+        return token.replace(text) { m ->
+            val s = m.value
+            val digits = s.count { it.isDigit() }
+            val allOk = s.all { it.isDigit() || it in CONFUSABLES }
+            if (allOk && digits >= 2 && digits * 3 >= s.length) {
+                s.map { CONFUSABLES[it] ?: it }.joinToString("")
+            } else s
+        }
+    }
+
+    /** "+254 722 123 456", "0722-123-456", "254 7 2 2 ..." -> "0722123456". */
+    private fun joinPhones(text: String): String {
+        val spaced = Regex("""(?<![\d+])(?:\+\s?254|254|0)[ \-]?([17](?:[ \-]?\d){8})(?![\d])""")
+        return spaced.replace(text) { m -> "0" + m.groupValues[1].filter { it.isDigit() } }
+    }
+
+    /**
+     * Join runs of short digit groups ("522 522", "5 3 2 4 1 1", "12-34-56") when the joined
+     * length looks like a business/till number (5-7 digits). Long groups are never merged, so
+     * "123456 0712345678" stays two numbers.
+     */
+    private fun joinDigitGroups(text: String): String {
+        val run = Regex("""(?<![\d])\d{1,4}(?:[ \-]\d{1,4})+(?![\d])""")
+        return run.replace(text) { m ->
+            val groups = m.value.split(' ', '-')
+            // Find the longest prefix of groups whose joined length is 5..7.
+            val joined = StringBuilder()
+            var out: String? = null
+            var used = 0
+            for ((i, g) in groups.withIndex()) {
+                joined.append(g)
+                if (joined.length in 5..7) { out = joined.toString(); used = i + 1 }
+                if (joined.length > 7) break
+            }
+            if (out == null) m.value
+            else (listOf(out) + groups.drop(used)).joinToString(" ")
+        }
+    }
+
+    // ------------------------------------------------------------------ parsing
+
+    private data class Num(val value: String, val start: Int, val end: Int)
+
+    /** Parse OCR text into candidates, most specific (paybill/till) first. Duplicates removed. */
+    fun parse(raw: String): List<Candidate> {
+        val text = normalize(raw)
+        if (text.isBlank()) return emptyList()
+
+        val used = mutableSetOf<IntRange>() // number spans already assigned
+        val out = mutableListOf<Candidate>()
+
+        val phones = PHONE_RE.findAll(text).map { Num("0" + it.groupValues[1], it.range.first, it.range.last + 1) }.toList()
+        val phoneSpans = phones.map { it.start until it.end }
+        val business = BUSINESS_NUM_RE.findAll(text)
+            .map { Num(it.value, it.range.first, it.range.last + 1) }
+            .filter { n -> phoneSpans.none { n.start in it } }
+            .toList()
+
+        // Account values (so they are not re-used as phones / tills)
+        val accounts = ACCOUNT_RE.findAll(text).mapNotNull { m ->
+            val v = m.groupValues[1].trim('-')
+            if (v.isEmpty() || v in ACCOUNT_STOPWORDS) null
+            else Triple(m.range.first, m.groups[1]!!.range, v)
+        }.toList()
+        val accountSpans = accounts.map { it.second }
+
+        fun isAccountValue(n: Num) = accountSpans.any { n.start >= it.first && n.start <= it.last }
+
+        val hasPaybillKw = PAYBILL_KW.containsMatchIn(text)
+
+        // PAYBILL
+        for (kw in PAYBILL_KW.findAll(text)) {
+            val n = nearestNumber(business, kw.range, used, ::isAccountValue) ?: continue
+            used += n.start until n.end
+            val acc = accounts.firstOrNull { it.first >= n.end && it.first - n.end <= 60 }
+                ?: accounts.firstOrNull { it.first >= kw.range.last && it.first - kw.range.last <= 80 }
+            acc?.let { used += it.second }
+            out += Candidate(PaymentType.PAYBILL, n.value, acc?.third?.let(::cleanAccount))
+        }
+
+        // TILL ("lipa na m-pesa" only counts when no paybill keyword exists)
+        val tillKws = TILL_KW.findAll(text).toMutableList()
+        if (!hasPaybillKw) tillKws += LIPA_KW.findAll(text)
+        for (kw in tillKws.sortedBy { it.range.first }) {
+            val n = nearestNumber(business, kw.range, used, ::isAccountValue) ?: continue
+            used += n.start until n.end
+            out += Candidate(PaymentType.TILL, n.value)
+        }
+
+        // PHONES
+        for (p in phones) {
+            if (used.any { p.start in it }) continue
+            if (accountSpans.any { p.start in it }) continue
+            val near = text.substring((p.start - 45).coerceAtLeast(0), p.start)
+            val c = when {
+                POCHI_KW.containsMatchIn(near) -> Candidate(PaymentType.POCHI, p.value)
+                SEND_KW.containsMatchIn(near) -> Candidate(PaymentType.SEND_MONEY, p.value)
+                else -> Candidate(PaymentType.SEND_MONEY, p.value, typeConfirmed = false)
+            }
+            out += c
+        }
+
+        return out.distinctBy { it.type to it.number }
+    }
+
+    private fun nearestNumber(nums: List<Num>, kw: IntRange, used: Set<IntRange>, isAccount: (Num) -> Boolean): Num? {
+        val free = nums.filter { n -> used.none { n.start in it } && !isAccount(n) }
+        val after = free.filter { it.start > kw.last && it.start - kw.last <= AFTER_WINDOW }.minByOrNull { it.start }
+        if (after != null) return after
+        return free.filter { it.end <= kw.first && kw.first - it.end <= BEFORE_WINDOW }.maxByOrNull { it.end }
+    }
+
+    /** Uppercase the account and fix O/I/S/B only when sandwiched between digits ("12O45"). */
+    private fun cleanAccount(v: String): String {
+        val chars = v.toCharArray()
+        for (i in 1 until chars.size - 1) {
+            val fix = CONFUSABLES[chars[i]]
+            if (fix != null && chars[i - 1].isDigit() && chars[i + 1].isDigit()) chars[i] = fix
+        }
+        return String(chars).uppercase()
+    }
+}
