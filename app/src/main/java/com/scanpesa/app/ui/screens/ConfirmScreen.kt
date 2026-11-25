@@ -23,6 +23,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -123,9 +127,30 @@ private fun ConfirmForm(vm: AppViewModel, d: Draft, showBackToList: Boolean, onB
     var error by remember { mutableStateOf<String?>(null) }
     var askService by remember { mutableStateOf<GoResult.NeedsService?>(null) }
 
+    // Go is locked for a moment whenever this form (re)appears, so a tap meant for the previous
+    // screen ("Use this", "Send Money / Pochi") can never land on Go and open SIM Toolkit.
+    var goArmed by remember(d) { mutableStateOf(false) }
+    LaunchedEffect(d) {
+        goArmed = false
+        delay(1500)
+        goArmed = true
+    }
+    // One job per tap: after launching, Go stays off until the user comes back and waits again.
+    var launched by remember(d) { mutableStateOf(false) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (launched) {
+            launched = false
+            goArmed = false
+        }
+    }
+    LaunchedEffect(launched, goArmed) {
+        if (!launched && !goArmed) { delay(1500); goArmed = true }
+    }
+
     fun submit(autofill: Boolean) {
+        if (!goArmed || launched) return
         when (val r = vm.go(type, number, account, target, autofill)) {
-            GoResult.Launched -> error = null
+            GoResult.Launched -> { error = null; launched = true }
             is GoResult.NeedsService -> askService = r
             is GoResult.Error -> error = r.message
         }
@@ -189,7 +214,12 @@ private fun ConfirmForm(vm: AppViewModel, d: Draft, showBackToList: Boolean, onB
     }
 
     error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold) }
-    BigButton("Go", onClick = { submit(autofill = true) }, modifier = Modifier.heightIn(min = 72.dp))
+    BigButton(
+        if (goArmed && !launched) "Go" else "Go (wait…)",
+        onClick = { submit(autofill = true) },
+        enabled = goArmed && !launched,
+        modifier = Modifier.heightIn(min = 72.dp),
+    )
     Text(
         "ScanPesa will open ${target.label} and type the numbers. You enter the amount and PIN.",
         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,

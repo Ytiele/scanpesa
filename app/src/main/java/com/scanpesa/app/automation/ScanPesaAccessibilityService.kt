@@ -84,6 +84,12 @@ class ScanPesaAccessibilityService : AccessibilityService() {
         scheduleTick(600)
     }
 
+    /** The user came back to ScanPesa while a job was pending: drop it so nothing runs later. */
+    fun cancelPending(reason: String) {
+        val job = JobStore.current ?: return
+        finish(job, Outcome.Failed(engine?.currentStepName ?: "start", reason))
+    }
+
     /** Stop button on the status strip. */
     private fun cancelJob() {
         val job = JobStore.current ?: run { overlay?.hide(); return }

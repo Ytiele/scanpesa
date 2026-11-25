@@ -12,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.scanpesa.app.automation.JobStore
+import com.scanpesa.app.automation.ScanPesaAccessibilityService
 import com.scanpesa.app.ui.AppViewModel
 import com.scanpesa.app.ui.ScanPesaTheme
 import com.scanpesa.app.ui.screens.ConfirmScreen
@@ -34,6 +36,17 @@ object Routes {
 
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
+
+    override fun onResume() {
+        super.onResume()
+        // Coming back to ScanPesa cancels any auto-fill that hasn't finished: SIM Toolkit is only
+        // ever driven right after Go, never later in the background.
+        val job = JobStore.current
+        if (job != null && System.currentTimeMillis() - job.createdAt > 1500) {
+            ScanPesaAccessibilityService.instance?.cancelPending("Cancelled: you went back to ScanPesa")
+                ?: JobStore.clear()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

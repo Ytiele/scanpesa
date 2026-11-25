@@ -125,7 +125,7 @@ Matching ignores case, punctuation and leading menu numbers ("2. Send Money" mat
 
 **Tuning steps:**
 
-1. Open **Settings** and tap the **"ScanPesa 1.3.0"** line at the bottom 7 times. Debug options appear.
+1. Open **Settings** and tap the **"ScanPesa 1.3.1"** line at the bottom 7 times. Debug options appear.
 2. Turn on **Debug mode**.
 3. Open the M-PESA app, SIM Toolkit or One App yourself and go through the menus by hand.
 4. Each screen is dumped as lines like:
