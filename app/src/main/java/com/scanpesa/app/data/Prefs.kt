@@ -30,11 +30,6 @@ class Prefs(context: Context) {
         get() = sp.getInt("sim_slot", 1)
         set(v) = sp.edit().putInt("sim_slot", v.coerceIn(1, 2)).apply()
 
-    /** Capture automatically once a reading is steady (off: the user presses the shutter). */
-    var autoCapture: Boolean
-        get() = sp.getBoolean("auto_capture", false)
-        set(v) = sp.edit().putBoolean("auto_capture", v).apply()
-
     var vibrateOnDetect: Boolean
         get() = sp.getBoolean("vibrate", true)
         set(v) = sp.edit().putBoolean("vibrate", v).apply()

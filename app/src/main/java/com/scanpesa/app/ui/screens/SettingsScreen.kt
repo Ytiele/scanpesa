@@ -64,7 +64,6 @@ fun SettingsScreen(vm: AppViewModel, onAdvanced: () -> Unit) {
     val prefs = vm.prefs
     var sim by remember { mutableIntStateOf(prefs.simSlot) }
     var vibrate by remember { mutableStateOf(prefs.vibrateOnDetect) }
-    var autoCapture by remember { mutableStateOf(prefs.autoCapture) }
     var showDisclosure by remember { mutableStateOf(false) }
     var enabled by remember { mutableStateOf(TargetLauncher.isServiceEnabled(ctx)) }
     val running by ScanPesaAccessibilityService.connected.collectAsState()
@@ -128,12 +127,6 @@ fun SettingsScreen(vm: AppViewModel, onAdvanced: () -> Unit) {
 
             SectionLabel("Scanning")
             RowGroup {
-                SwitchRow(
-                    "Auto-capture when steady",
-                    subtitle = "Off: you press the shutter when the boxes look right",
-                    checked = autoCapture,
-                ) { autoCapture = it; prefs.autoCapture = it }
-                RowDivider()
                 SwitchRow("Vibrate on capture", checked = vibrate) { vibrate = it; prefs.vibrateOnDetect = it }
             }
 
