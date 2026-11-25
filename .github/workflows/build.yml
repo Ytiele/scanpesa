@@ -19,13 +19,15 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
-
+      # The runner ships an Android SDK; use its sdkmanager directly.
       - name: Install SDK platform 37.2 and build-tools
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-37.2" "build-tools;37.0.0" \
-            || sdkmanager "platforms/android-37.2" "build-tools/37.0.0"
+          SDKM=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
+          echo "Using $SDKM"
+          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+          "$SDKM" "platforms/android-37.2" "build-tools/37.0.0" \
+            || "$SDKM" "platforms;android-37.2" "build-tools;37.0.0"
+          ls "$ANDROID_HOME/platforms"
 
       - uses: gradle/actions/setup-gradle@v4
 
