@@ -44,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -79,8 +80,8 @@ fun ScanScreen(vm: AppViewModel, onDetected: () -> Unit, onManual: () -> Unit, o
 
     Scaffold(topBar = { ScreenTopBar("Scan", onBack) }) { pad ->
         Column(
-            Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             if (!granted) {
                 Text("ScanPesa needs the camera to read M-PESA numbers. Text is read on the phone, offline.")
@@ -167,9 +168,9 @@ private fun CameraScanner(vm: AppViewModel, onDetected: () -> Unit, onManual: ()
     }
 
     Box(
-        Modifier.fillMaxWidth().aspectRatio(3f / 4f).border(3.dp, Green, RoundedCornerShape(20.dp)),
+        Modifier.fillMaxWidth().aspectRatio(3f / 4f).clip(RoundedCornerShape(24.dp)).border(2.dp, Green, RoundedCornerShape(24.dp)),
     ) {
-        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize().padding(3.dp))
+        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
         Text(
             status,
             color = Color.White,
