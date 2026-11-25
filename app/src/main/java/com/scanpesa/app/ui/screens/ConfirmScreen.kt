@@ -1,5 +1,13 @@
 package com.scanpesa.app.ui.screens
 
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import com.scanpesa.app.R
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -278,10 +286,7 @@ private fun ConfirmForm(
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.s)) {
-                TextButton(onClick = onRescan) { Text("Retake scan") }
-                if (showBackToList) TextButton(onClick = onBackToList) { Text("Other result") }
-            }
+            if (showBackToList) BigOutlinedButton("Pick a different result", onClick = onBackToList)
         }
 
         // Pinned action area
@@ -299,12 +304,26 @@ private fun ConfirmForm(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                BigButton(
-                    if (goArmed && !launched) "Go" else "Go (wait…)",
-                    onClick = { submit(autofill = true) },
-                    enabled = goArmed && !launched,
-                    modifier = Modifier.heightIn(min = 64.dp),
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.s), verticalAlignment = Alignment.CenterVertically) {
+                    // Retake: clearly visible, but secondary and away from the thumb's Go spot.
+                    OutlinedButton(
+                        onClick = onRescan,
+                        modifier = Modifier.weight(1f).heightIn(min = 64.dp),
+                        shape = MaterialTheme.shapes.medium,
+                        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
+                        contentPadding = PaddingValues(horizontal = Space.s),
+                    ) {
+                        Icon(painterResource(R.drawable.ic_scan), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(Space.xs))
+                        Text("Retake", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, maxLines = 1, softWrap = false)
+                    }
+                    BigButton(
+                        if (goArmed && !launched) "Go" else "Go (wait…)",
+                        onClick = { submit(autofill = true) },
+                        enabled = goArmed && !launched,
+                        modifier = Modifier.weight(1.3f).heightIn(min = 64.dp),
+                    )
+                }
             }
         }
     }
