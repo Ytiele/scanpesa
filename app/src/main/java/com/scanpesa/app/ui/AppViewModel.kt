@@ -61,6 +61,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun pick(c: Candidate) { draft.value = c.toDraft() }
 
+    /** The last photo read (camera shutter or gallery), shown on the "Tap the number" screen. */
+    val photo = MutableStateFlow<PhotoScan?>(null)
+
+    fun onPhotoRead(p: PhotoScan) {
+        photo.value = p
+        candidates.value = emptyList()
+        draft.value = null
+    }
+
+    /** The user tapped / confirmed a number on the photo. */
+    fun pickFromPhoto(c: Candidate) {
+        frozenFrame.value = photo.value?.bitmap
+        candidates.value = emptyList()
+        draft.value = c.toDraft()
+    }
+
     fun startManual() {
         candidates.value = emptyList()
         frozenFrame.value = null

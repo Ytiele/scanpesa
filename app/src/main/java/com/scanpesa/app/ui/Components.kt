@@ -45,7 +45,7 @@ import com.scanpesa.app.R
  * (Name kept from the first design so all screens share it.)
  */
 @Composable
-fun ScreenTopBar(title: String, onBack: (() -> Unit)?, subtitle: String? = null) {
+fun ScreenTopBar(title: String, onBack: (() -> Unit)?, subtitle: String? = null, action: (@Composable () -> Unit)? = null) {
     Column(
         Modifier.fillMaxWidth().statusBarsPadding()
             .padding(start = if (onBack != null) Space.xs else Space.screen, end = Space.screen, top = Space.s, bottom = Space.s),
@@ -57,7 +57,9 @@ fun ScreenTopBar(title: String, onBack: (() -> Unit)?, subtitle: String? = null)
                 }
                 Spacer(Modifier.width(Space.xs))
             }
-            Text(title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground)
+            Text(title, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f))
+            if (action != null) action()
         }
         if (subtitle != null) {
             Text(

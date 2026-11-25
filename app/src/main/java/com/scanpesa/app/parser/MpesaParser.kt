@@ -30,7 +30,7 @@ object MpesaParser {
 
     /** Account keyword followed by its value (value may be alphanumeric, may contain a dash). */
     private val ACCOUNT_RE = Regex(
-        """(?:\baccount|\bacct|\bacc|\ba/c)(?![a-mo-z])\.?\s*(?:n[o0]\.?|number|num|#)?\s*[:#.\-=]?\s*([a-z0-9][a-z0-9\-]{0,23})"""
+        """(?:\baccount|\bacct|\bacc|\ba/c)(?![a-mo-z])\.?\s*(?:n[o0c]\.?|number|num|#)?\s*[:#.\-=]?\s*([a-z0-9][a-z0-9\-]{0,23})"""
     )
     private val ACCOUNT_STOPWORDS = setOf("no", "n0", "number", "num", "name", "names")
 

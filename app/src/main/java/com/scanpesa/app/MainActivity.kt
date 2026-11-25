@@ -37,6 +37,7 @@ import com.scanpesa.app.ui.screens.DebugScreen
 import com.scanpesa.app.ui.screens.HistoryScreen
 import com.scanpesa.app.ui.screens.HomeScreen
 import com.scanpesa.app.ui.screens.OnboardingScreen
+import com.scanpesa.app.ui.screens.PickScreen
 import com.scanpesa.app.ui.screens.ScanScreen
 import com.scanpesa.app.ui.screens.SettingsScreen
 
@@ -45,6 +46,7 @@ object Routes {
     /** The three tabs: Scan (home), History, Settings. */
     const val MAIN = "main"
     const val SCAN = "scan"
+    const val PICK = "pick"
     const val CONFIRM = "confirm"
     const val ADVANCED = "advanced"
     const val DEBUG = "debug"
@@ -120,8 +122,17 @@ class MainActivity : ComponentActivity() {
                         composable(Routes.SCAN) {
                             ScanScreen(
                                 vm = vm,
-                                onDetected = { nav.navigate(Routes.CONFIRM) { popUpTo(Routes.SCAN) { inclusive = true } } },
+                                onPhotoRead = { nav.navigate(Routes.PICK) { popUpTo(Routes.SCAN) { inclusive = true } } },
                                 onManual = { vm.startManual(); nav.navigate(Routes.CONFIRM) { popUpTo(Routes.SCAN) { inclusive = true } } },
+                                onBack = { nav.popBackStack() },
+                            )
+                        }
+                        composable(Routes.PICK) {
+                            PickScreen(
+                                vm = vm,
+                                onContinue = { nav.navigate(Routes.CONFIRM) },
+                                onRetake = { nav.navigate(Routes.SCAN) { popUpTo(Routes.MAIN) } },
+                                onManual = { vm.startManual(); nav.navigate(Routes.CONFIRM) { popUpTo(Routes.MAIN) } },
                                 onBack = { nav.popBackStack() },
                             )
                         }
@@ -129,7 +140,7 @@ class MainActivity : ComponentActivity() {
                             ConfirmScreen(
                                 vm = vm,
                                 onBack = { nav.popBackStack() },
-                                onRescan = { nav.navigate(Routes.SCAN) { popUpTo(Routes.CONFIRM) { inclusive = true } } },
+                                onRescan = { nav.navigate(Routes.SCAN) { popUpTo(Routes.MAIN) } },
                             )
                         }
                         composable(Routes.ADVANCED) {
