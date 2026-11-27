@@ -15,9 +15,11 @@ android {
         applicationId = "com.scanpesa.app"
         minSdk = 26
         targetSdk = 37
-        versionCode = 12
-        versionName = "1.9.0"
+        versionCode = 13
+        versionName = "1.10.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Real phones only (keeps the APK smaller now that two OCR engines ship native code).
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     // Fixed debug key so APKs built on any machine (or GitHub Actions) install over each other.
@@ -54,6 +56,16 @@ android {
         buildConfig = true
     }
 
+    packaging {
+        // Compress native libraries in the APK (ONNX Runtime + ML Kit are large); smaller download.
+        jniLibs { useLegacyPackaging = true }
+    }
+
+    androidResources {
+        // .onnx models are already compressed; storing them uncompressed lets them load faster.
+        noCompress += "onnx"
+    }
+
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
@@ -81,6 +93,8 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.text.recognition)
+    // Second OCR engine: PaddleOCR PP-OCRv4 mobile models (assets/paddle) run with ONNX Runtime.
+    implementation(libs.onnxruntime.android)
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)

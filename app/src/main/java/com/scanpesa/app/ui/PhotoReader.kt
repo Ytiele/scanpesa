@@ -56,7 +56,44 @@ object PhotoReader {
     /** Tilt (degrees) below which the photo is read as-is. */
     private const val MAX_STRAIGHT = 3f
 
-    fun read(source: Bitmap, onDone: (PhotoScan?) -> Unit) {
+    /**
+     * Two OCR engines: ML Kit (6 readings, straightened, voted) and then PaddleOCR on the same
+     * photo. They make different mistakes; see [Consensus.combine] for how they're merged.
+     * [ctx] null = ML Kit only.
+     */
+    fun read(source: Bitmap, ctx: android.content.Context?, onDone: (PhotoScan?) -> Unit) {
+        readMlKit(source) { mk ->
+            if (mk == null || ctx == null) { onDone(mk); return@readMlKit }
+            val main = android.os.Handler(android.os.Looper.getMainLooper())
+            paddleExecutor.execute {
+                val pd = runCatching { paddleScan(ctx, mk.bitmap) }.getOrNull()
+                main.post { onDone(if (pd == null) mk else combine(mk, pd)) }
+            }
+        }
+    }
+
+    private val paddleExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    /** PaddleOCR readings of [base] (already enlarged/straightened): its lines + rebuilt rows. */
+    private fun paddleScan(ctx: android.content.Context, base: Bitmap): PhotoScan? {
+        val lines = PaddleOcr.read(ctx, base)
+        val rows = Layout.rows(lines.flatMap { it.words })
+        val readings = listOf(
+            Reading(lines, lines.joinToString("\n") { l -> l.words.joinToString(" ") { it.text } }),
+            Reading(rows, Layout.text(rows)),
+        )
+        var result: PhotoScan? = null
+        finish(base, readings) { result = it }
+        return result
+    }
+
+    private fun combine(mk: PhotoScan, pd: PhotoScan): PhotoScan {
+        val d = Consensus.combine(mk.decision, mk.picks, pd.decision)
+        return PhotoScan(mk.bitmap, mk.text + "\n=== paddle ===\n" + pd.text, mk.tokens, mk.candidates, d, mk.picks + pd.picks)
+    }
+
+    /** ML Kit only (also used by the benchmark to compare engines). */
+    fun readMlKit(source: Bitmap, onDone: (PhotoScan?) -> Unit) {
         val enlarged = enlarge(source)
         // First look: how tilted is the text? Then read a straightened copy if needed.
         recognizer.process(InputImage.fromBitmap(enlarged, 0))
@@ -161,6 +198,9 @@ object PhotoReader {
             if (text.isBlank()) null else OcrWord(text, b.toBox())
         })
     }
+
+    /** PaddleOCR only (benchmarking). Blocking. */
+    fun readPaddleOnly(ctx: android.content.Context, source: Bitmap): PhotoScan? = paddleScan(ctx, enlarge(source))
 
     private fun finish(base: Bitmap, readings: List<Reading>, onDone: (PhotoScan?) -> Unit) {
         if (readings.isEmpty()) { onDone(null); return }

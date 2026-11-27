@@ -1,5 +1,7 @@
 package com.scanpesa.app.parser
 
+import com.scanpesa.app.model.PaymentType
+
 /**
  * Rebuilds reading order from word positions instead of trusting the OCR engine's line order.
  * Boxed digits ("[8][8][4][8][8][3][4]") often come back as separate lines or out of order; grouping
@@ -24,9 +26,10 @@ object Layout {
         return rows.sortedBy { r -> r.minOf { it.box.top } }.map { r -> OcrLine(r.sortedBy { it.box.left }) }
     }
 
-    private fun digitPiece(t: String): Int? {
+    /** Length of an all-digit word (after OCR fixes), else null. */
+    private fun digitLen(t: String): Int? {
         val n = MpesaParser.normalize(t)
-        if (n.isEmpty() || n.length > 4 || !n.all { it.isDigit() }) return null
+        if (n.isEmpty() || n.length > 14 || !n.all { it.isDigit() }) return null
         return n.length
     }
 
@@ -36,8 +39,11 @@ object Layout {
         row.words.forEachIndexed { i, w ->
             if (i > 0) {
                 val prev = row.words[i - 1]
-                val join = digitPiece(prev.text) != null && digitPiece(w.text) != null &&
-                    (w.box.left - prev.box.right) < 2.5f * maxOf(h(prev.box), h(w.box))
+                val a = digitLen(prev.text); val b = digitLen(w.text)
+                // Join short digit pieces ("0712 345 678", boxed digits), and a lone 1-2 digit piece
+                // next to a longer number (an edge box read separately: "4" "99077" "4").
+                val pieces = a != null && b != null && ((a <= 4 && b <= 4) || minOf(a, b) <= 2)
+                val join = pieces && (w.box.left - prev.box.right) < 2.5f * maxOf(h(prev.box), h(w.box))
                 if (!join) sb.append(' ')
             }
             sb.append(w.text)
@@ -54,6 +60,43 @@ object Layout {
 object Consensus {
 
     data class Decision(val pick: PhotoTokens.AutoPick?, val uncertain: Boolean, val votes: Int, val readings: Int)
+
+    /**
+     * Merges ML Kit (primary: [a] and its per-reading [aPicks]) with PaddleOCR ([b]) as a second
+     * witness. Paddle never overrules a clean ML Kit answer; it only:
+     *  - supplies an account ML Kit couldn't settle, if one of ML Kit's own readings saw exactly it;
+     *  - settles an ML Kit "not sure", if Paddle agrees with ML Kit's most-voted number;
+     *  - provides the number when ML Kit found nothing at all (its account is not trusted alone).
+     */
+    fun combine(a: Decision, aPicks: List<PhotoTokens.AutoPick?>, b: Decision): Decision {
+        val pa = a.pick; val pb = b.pick
+        val readings = a.readings + b.readings
+        val norm = { s: String? -> s?.uppercase()?.filter { it.isLetterOrDigit() }?.takeIf { it.isNotEmpty() } }
+        val seenByA = { n: String, acc: String? -> aPicks.any { it?.candidate?.number == n && (acc == null || norm(it.candidate.account) == norm(acc)) } }
+        if (pa != null) {
+            if (pa.candidate.account == null && pb != null && pb.candidate.number == pa.candidate.number) {
+                val acc = pb.candidate.account
+                if (acc != null && acc.any(Char::isDigit) && seenByA(pa.candidate.number, acc)) {
+                    return a.copy(pick = pa.copy(candidate = pa.candidate.copy(account = acc)), readings = readings)
+                }
+            }
+            return a.copy(readings = readings)
+        }
+        if (pb == null) return Decision(null, uncertain = a.uncertain || b.uncertain, votes = 0, readings = readings)
+        if (a.uncertain) {
+            // Paddle may only back ML Kit's most-voted number (never its minority reading).
+            val top = aPicks.filterNotNull().groupBy { it.candidate.number }.maxByOrNull { it.value.size }?.key
+            if (pb.candidate.number != top) return Decision(null, uncertain = true, votes = 0, readings = readings)
+            val acc = pb.candidate.account?.takeIf { seenByA(pb.candidate.number, it) }
+            return Decision(pb.copy(candidate = pb.candidate.copy(account = acc)), false, b.votes, readings)
+        }
+        // ML Kit found nothing: trust Paddle alone only for phone numbers (Send Money / Pochi). A
+        // dropped digit turns a phone into an invalid number, but a 5-7 digit Till/Paybill with a
+        // dropped digit still looks valid, so those need ML Kit's support.
+        val phone = pb.candidate.type == PaymentType.SEND_MONEY || pb.candidate.type == PaymentType.POCHI
+        if (!phone) return Decision(null, uncertain = true, votes = 0, readings = readings)
+        return Decision(pb.copy(candidate = pb.candidate.copy(account = null)), false, b.votes, readings)
+    }
 
     fun decide(picks: List<PhotoTokens.AutoPick?>): Decision {
         val valid = picks.filterNotNull()

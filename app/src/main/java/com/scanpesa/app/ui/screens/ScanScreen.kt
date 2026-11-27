@@ -100,11 +100,17 @@ fun ScanScreen(vm: AppViewModel, onPhotoRead: () -> Unit, onBack: () -> Unit) {
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted = it }
     var reading by remember { mutableStateOf<Bitmap?>(null) } // photo being read
+    // Load the second OCR engine's models in the background while the user aims (first load ~1-2 s).
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            runCatching { com.scanpesa.app.ui.PaddleOcr.init(ctx) }
+        }
+    }
 
     fun read(bitmap: Bitmap?) {
         if (bitmap == null) { Toast.makeText(ctx, "Couldn't open that photo", Toast.LENGTH_SHORT).show(); return }
         reading = bitmap
-        PhotoReader.read(bitmap) { scan ->
+        PhotoReader.read(bitmap, ctx) { scan ->
             reading = null
             if (scan == null) { Toast.makeText(ctx, "Couldn't read that photo", Toast.LENGTH_SHORT).show(); return@read }
             if (vm.prefs.vibrateOnDetect && scan.tokens.isNotEmpty()) vibrate(ctx)

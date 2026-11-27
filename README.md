@@ -229,6 +229,26 @@ no reading saw a longer account (a dropped digit), and no stray character follow
 
 `python tools/bench.py --set tilt` runs the tilted set (`samples/tilt`, `samples/answers_tilt.csv`).
 
+### Two OCR engines
+
+ScanPesa reads every photo with **Google ML Kit** (primary) and then with **PaddleOCR PP-OCRv4
+mobile** (offline, Apache-2.0, run with ONNX Runtime; models in `app/src/main/assets/paddle`). The
+engines make different mistakes, but PaddleOCR is only a second witness. It never overrules a
+clean ML Kit answer; it can:
+- confirm an account ML Kit couldn't settle, if one of ML Kit's readings saw exactly that account;
+- settle an ML Kit "not sure", only by backing ML Kit's most-voted number;
+- provide a **phone number** (Send Money / Pochi) when ML Kit found nothing, e.g. handwritten
+  digits in boxes. Never a Till/Paybill on its own: a dropped digit still looks valid there.
+
+| Set (2026-11-27) | ML Kit only | ML Kit + PaddleOCR |
+|---|---|---|
+| 33 straight photos | 24 correct, 0 wrong | **25 correct, 0 wrong** |
+| 84 tilted copies | 58 correct, 0 wrong | **66 correct, 0 wrong** |
+
+`--engine mlkit | paddle | both` (default `mlkit` in the script; the app uses both). Cost: about
++0.7 s per photo and +11 MB APK (native libraries are compressed; models load in the background
+when the Scan screen opens).
+
 ## Safety design
 
 - Password nodes (`isPassword`) are dropped before anything else sees the screen. They are never read, logged, dumped, clicked or typed into.

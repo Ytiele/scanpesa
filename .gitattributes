@@ -3,3 +3,4 @@
 *.jar binary
 *.keystore binary
 *.png binary
+*.onnx binary

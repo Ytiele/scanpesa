@@ -41,7 +41,25 @@ class AdbBenchActivity : Activity() {
             next(files, i + 1, out)
             return
         }
-        PhotoReader.read(bmp) { scan ->
+        val engine = intent.getStringExtra("engine") ?: "mlkit"
+        if (engine == "paddle") {
+            Thread {
+                val scan = runCatching { PhotoReader.readPaddleOnly(this, bmp) }
+                    .onFailure { Log.e(TAG, "paddle failed", it) }.getOrNull()
+                runOnUiThread { record(f, bmp, started, scan, out); next(files, i + 1, out) }
+            }.start()
+            return
+        }
+        val reader: (android.graphics.Bitmap, (com.scanpesa.app.ui.PhotoScan?) -> Unit) -> Unit =
+            if (engine == "mlkit") { b, cb -> PhotoReader.readMlKit(b, cb) } else { b, cb -> PhotoReader.read(b, this, cb) }
+        reader(bmp) { scan ->
+            record(f, bmp, started, scan, out)
+            next(files, i + 1, out)
+        }
+    }
+
+    private fun record(f: File, bmp: android.graphics.Bitmap, started: Long, scan: com.scanpesa.app.ui.PhotoScan?, out: File) {
+        run {
             val pick = scan?.decision?.pick
             val o = JSONObject()
                 .put("file", f.name)
@@ -56,7 +74,6 @@ class AdbBenchActivity : Activity() {
                 .put("candidates", scan?.candidates?.joinToString(";") { "${it.type}:${it.number}:${it.account.orEmpty()}" } ?: "")
                 .put("text", scan?.text ?: "")
             out.appendText(o.toString() + "\n")
-            next(files, i + 1, out)
         }
     }
 

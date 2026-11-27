@@ -1,0 +1,6 @@
+PaddleOCR PP-OCRv4 mobile models (det.onnx: ch_PP-OCRv4_det_infer, rec.onnx: ch_PP-OCRv4_rec_infer)
+and character list (keys.txt: ppocr_keys_v1.txt).
+
+Copyright (c) PaddlePaddle Authors. Licensed under the Apache License, Version 2.0.
+https://github.com/PaddlePaddle/PaddleOCR
+ONNX conversions from the RapidOCR project (Apache License 2.0): https://huggingface.co/SWHL/RapidOCR

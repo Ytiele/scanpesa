@@ -29,7 +29,8 @@ def adb(*args, **kw):
 
 def run_on_phone():
     adb("logcat", "-c")
-    adb("shell", "am", "start", "-n", f"{PKG}/.automation.AdbBenchActivity", "--es", "set", SET)
+    engine = sys.argv[sys.argv.index("--engine") + 1] if "--engine" in sys.argv else "mlkit"
+    adb("shell", "am", "start", "-n", f"{PKG}/.automation.AdbBenchActivity", "--es", "set", SET, "--es", "engine", engine)
     t0 = time.time()
     while time.time() - t0 < 600:
         time.sleep(2)

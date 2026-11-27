@@ -62,6 +62,35 @@ class LayoutConsensusTest {
         assertNull("2 vs 1 is not clear enough", d.pick!!.candidate.account)
     }
 
+    private fun dec(p: PhotoTokens.AutoPick?, unsure: Boolean = false) = Consensus.Decision(p, unsure, if (p == null) 0 else 3, 6)
+
+    @Test fun cleanMlKitAnswerIsNeverOverruled() {
+        val mk = pick(PaymentType.TILL, "123456")
+        val d = Consensus.combine(dec(mk), listOf(mk), dec(pick(PaymentType.TILL, "23456")))
+        assertEquals("123456", d.pick!!.candidate.number)
+    }
+
+    @Test fun paddleSuppliesAccountOnlyIfMlKitAlsoSawIt() {
+        val mk = pick(PaymentType.PAYBILL, "542542", null)
+        val seen = listOf(mk, pick(PaymentType.PAYBILL, "542542", "739449"), pick(PaymentType.PAYBILL, "542542", "7394449"))
+        assertEquals("739449", Consensus.combine(dec(mk), seen, dec(pick(PaymentType.PAYBILL, "542542", "739449"))).pick!!.candidate.account)
+        assertNull(Consensus.combine(dec(mk), seen, dec(pick(PaymentType.PAYBILL, "542542", "73394"))).pick!!.candidate.account)
+    }
+
+    @Test fun paddleSettlesMlKitDoubtOnlyByBackingItsLeadingNumber() {
+        // Real case (tilted 20 deg): ML Kit 6x 123456 vs 4x 23456; Paddle read 23456 -> must stay unsure.
+        val readings = List(6) { pick(PaymentType.TILL, "123456") } + List(4) { pick(PaymentType.TILL, "23456") }
+        assertTrue(Consensus.combine(dec(null, true), readings, dec(pick(PaymentType.TILL, "23456"))).uncertain)
+        assertEquals("123456", Consensus.combine(dec(null, true), readings, dec(pick(PaymentType.TILL, "123456"))).pick!!.candidate.number)
+    }
+
+    @Test fun paddleAloneOnlyForPhoneNumbers() {
+        // Real case: boxed till 123456 read by Paddle as 23456 while ML Kit found nothing.
+        assertTrue(Consensus.combine(dec(null), listOf(null, null), dec(pick(PaymentType.TILL, "23456"))).uncertain)
+        assertTrue(Consensus.combine(dec(null), listOf(null), dec(pick(PaymentType.PAYBILL, "247247", "238"))).uncertain)
+        assertEquals("0712001374", Consensus.combine(dec(null), emptyList(), dec(pick(PaymentType.POCHI, "0712001374"))).pick!!.candidate.number)
+    }
+
     @Test fun singleReadingWithNoConflictIsAccepted() {
         val d = Consensus.decide(listOf(null, pick(PaymentType.POCHI, "0712001374"), null))
         assertFalse(d.uncertain)
