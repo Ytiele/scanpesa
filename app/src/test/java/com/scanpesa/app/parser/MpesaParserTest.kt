@@ -170,9 +170,9 @@ class MpesaParserTest {
     // ---------------------------------------------------------------- multiple / none
 
     @Test fun sign22_paybillAndTillOnOneSign() {
-        val r = MpesaParser.parse("Paybill 222111 Acc 45\nOr Till 333444")
+        val r = MpesaParser.parse("Paybill 222111 Acc 4511\nOr Till 333444")
         assertEquals(2, r.size)
-        assertCandidate(r[0], PAYBILL, "222111", "45")
+        assertCandidate(r[0], PAYBILL, "222111", "4511")
         assertCandidate(r[1], TILL, "333444")
     }
 
@@ -246,6 +246,32 @@ class MpesaParserTest {
     @Test fun name04_accountThatRepeatsTheBusinessNameIsIgnored() {
         val c = only("Business name: Juja Traders\nPaybill 333222 Account: Juja")
         assertCandidate(c, PAYBILL, "333222", null)
+    }
+
+    // ---------------------------------------------------------------- real poster layouts (samples/)
+
+    @Test fun real01_boxedAccountDigitsJoin() {
+        val c = only("PAYBILL NUMBER\n625 6 2 5\nACCOUNT NUMBER\n20 1 43 6 1 1\nNATIONAL BANK OF KENYA")
+        assertCandidate(c, PAYBILL, "625625", "20143611")
+    }
+
+    @Test fun real02_accountLabelUnderTheValue() {
+        val c = only("Family Bank\nPAYBILL\n222111\n20252025\nACCOUNT NUMBER\nSAMPLE POSTER\nACCOUNT NAME")
+        assertCandidate(c, PAYBILL, "222111", "20252025")
+    }
+
+    @Test fun real03_boxedTillDigits() {
+        assertCandidate(only("BUY GOODS TILL NUMBER\n4 5 4 9 3 3 2"), TILL, "4549332")
+    }
+
+    @Test fun real04_boxEdgesInAccountAreGaps() {
+        val c = only("PAYBILL| BUSINESS NUMBER\n400200\nACCOUNT NUMBER\n40 0|7047|7\nBUSINESS NAME\nPOWER SOLAR LTD")
+        assertCandidate(c, PAYBILL, "400200", "40070477")
+    }
+
+    @Test fun real05_tinyScrapIsNotAnAccount() {
+        val c = only("PAYBILL NUMBER\n247247\nACCOUNT NUMBER\no2 47?")
+        assertCandidate(c, PAYBILL, "247247", null)
     }
 
     // ---------------------------------------------------------------- validator

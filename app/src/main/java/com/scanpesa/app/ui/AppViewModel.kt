@@ -52,11 +52,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** The photo it was read from (null when reused from History) and the boxes to highlight. */
     val photo = MutableStateFlow<PhotoScan?>(null)
     val highlight = MutableStateFlow<List<com.scanpesa.app.parser.Box>>(emptyList())
+    /** The readings disagreed: ask for a retake rather than guess. */
+    val uncertain = MutableStateFlow(false)
 
     /** A photo was read: decide the payment with no user choice. */
     fun onPhotoRead(p: PhotoScan) {
         photo.value = p
-        val pick = com.scanpesa.app.parser.PhotoTokens.autoPick(p.tokens, p.candidates, p.text)
+        val pick = p.decision.pick
+        uncertain.value = p.decision.uncertain
         draft.value = pick?.candidate?.toDraft()
         highlight.value = listOfNotNull(pick?.numberBox, pick?.accountBox)
     }
@@ -64,6 +67,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun reuse(e: ScanEntity) {
         photo.value = null
         highlight.value = emptyList()
+        uncertain.value = false
         draft.value = Draft(PaymentType.fromName(e.type) ?: PaymentType.SEND_MONEY, e.number, e.account.orEmpty(), true)
     }
 

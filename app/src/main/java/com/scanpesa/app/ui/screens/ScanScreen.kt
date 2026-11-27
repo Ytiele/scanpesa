@@ -1,5 +1,8 @@
 package com.scanpesa.app.ui.screens
 
+import com.scanpesa.app.ui.BigOutlinedButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.activity.result.PickVisualMediaRequest
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -109,6 +112,11 @@ fun ScanScreen(vm: AppViewModel, onPhotoRead: () -> Unit, onBack: () -> Unit) {
             onPhotoRead()
         }
     }
+    // Upload: pick an existing photo (screenshot, WhatsApp image...) and read it the same way.
+    val upload = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) read(PhotoReader.fromUri(ctx, uri))
+    }
+    val openUpload = { upload.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScreenTopBar("Scan", onBack)
@@ -119,15 +127,16 @@ fun ScanScreen(vm: AppViewModel, onPhotoRead: () -> Unit, onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 BigButton("Allow camera", onClick = { launcher.launch(Manifest.permission.CAMERA) })
+                BigOutlinedButton("Upload a photo instead", onClick = openUpload)
             }
         } else {
-            CameraScanner(reading, onPhoto = ::read)
+            CameraScanner(reading, onPhoto = ::read, onUpload = openUpload)
         }
     }
 }
 
 @Composable
-private fun CameraScanner(reading: Bitmap?, onPhoto: (Bitmap?) -> Unit) {
+private fun CameraScanner(reading: Bitmap?, onPhoto: (Bitmap?) -> Unit, onUpload: () -> Unit) {
     val ctx = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val previewView = remember { PreviewView(ctx).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
@@ -241,7 +250,7 @@ private fun CameraScanner(reading: Bitmap?, onPhoto: (Bitmap?) -> Unit) {
 
         Spacer(Modifier.height(Space.s))
         Text(
-            "Fit the Paybill or Till in the frame · pinch to zoom · tap to focus",
+            "Fit the sign in the frame · or upload a photo",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -256,7 +265,9 @@ private fun CameraScanner(reading: Bitmap?, onPhoto: (Bitmap?) -> Unit) {
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Spacer(Modifier.size(56.dp)) // keeps the shutter centred
+            FilledTonalIconButton(onClick = onUpload, enabled = reading == null, modifier = Modifier.size(56.dp)) {
+                Icon(painterResource(R.drawable.ic_photo), contentDescription = "Upload a photo", modifier = Modifier.size(26.dp))
+            }
             Shutter(busy = reading != null, onClick = ::shoot)
             val hasFlash = camera?.cameraInfo?.hasFlashUnit() == true
             FilledIconToggleButton(

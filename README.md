@@ -196,6 +196,30 @@ Press Back on the phone afterwards.
 SIM Toolkit remembers which menu it was last on, so every SIM Toolkit flow starts with a
 `back_until` step. It presses Back (at most 4 times) until the main menu's "M-PESA" item is visible.
 
+
+## Accuracy benchmark
+
+ScanPesa reads each photo several ways and only accepts a result the readings agree on:
+3 versions of the image (as-is, high-contrast greyscale, inverted) x 2 reading orders (the
+engine's lines, and lines rebuilt from word positions so boxed digits come back together).
+Box edges read as "|" are treated as gaps. If the readings disagree on the number it says
+**"Not sure, retake"**; if they disagree on the account, Go stays disabled. It never guesses.
+
+To measure it on real photos:
+
+1. Put the photos in `samples/` (kept out of git) and list the right answers in
+   `samples/answers.csv` (`file,type,number,account,note`; type = PAYBILL, TILL, SEND_MONEY or POCHI).
+2. Copy them into the app on a USB-connected phone (debug build):
+   ```bash
+   adb shell mkdir -p /data/local/tmp/bench && adb push samples/. /data/local/tmp/bench/
+   adb shell "run-as com.scanpesa.app sh -c 'mkdir -p files/bench && cp /data/local/tmp/bench/* files/bench/'"
+   ```
+3. `python tools/bench.py -v` runs the app's real reader on every photo and prints, per photo,
+   OK / SAFE (not sure, nothing found, or Paybill without account) / WRONG, plus the score.
+
+First run (34 web posters + phone photos, 2026-11-27): 22/33 correct with **9 wrong answers** ->
+now **24/33 correct, 9 safe misses, 0 wrong**.
+
 ## Safety design
 
 - Password nodes (`isPassword`) are dropped before anything else sees the screen. They are never read, logged, dumped, clicked or typed into.

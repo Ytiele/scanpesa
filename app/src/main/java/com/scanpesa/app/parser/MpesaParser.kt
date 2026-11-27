@@ -16,8 +16,8 @@ object MpesaParser {
 
     /** Letters OCR (especially of handwriting) reads instead of digits. Only applied inside digit runs. */
     private val CONFUSABLES = mapOf(
-        'o' to '0', 'i' to '1', 'l' to '1', '|' to '1', 's' to '5', 'b' to '8',
-        'z' to '2', 'g' to '9', 'q' to '9', 't' to '7',
+        'o' to '0', 'i' to '1', 'l' to '1', 's' to '5', 'b' to '8',
+        'z' to '2', 'g' to '9', 'q' to '9', 't' to '7', 'd' to '0',
     )
 
     private val PAYBILL_KW = Regex(
@@ -30,7 +30,7 @@ object MpesaParser {
 
     /** Account keyword followed by its value (value may be alphanumeric, may contain a dash). */
     private val ACCOUNT_RE = Regex(
-        """(?:\baccount|\bacct|\bacc|\ba/c)(?![a-mo-z])\.?\s*(?:n[o0c]\.?|number|num|#)?\s*[:#.\-=]?\s*([a-z0-9][a-z0-9\-]{0,23})"""
+        """(?:\baccount|\bacct|\bacc|\ba/c)(?![a-mo-z])\.?\s*(?:n[o0c]\.?|number|num|#)?\s*[:#.\-=]?\s*([a-z0-9][a-z0-9\-]{0,23}(?: \d{1,8})*)"""
     )
     private val ACCOUNT_STOPWORDS = setOf("no", "n0", "number", "num", "name", "names")
 
@@ -53,6 +53,10 @@ object MpesaParser {
         var t = raw.lowercase()
             .replace('–', '-').replace('—', '-')
             .replace(Regex("""[\r\n\t]+"""), " \n ")
+        // "|" inside a number is a box edge on boxed-digit signs, never a 1: treat it as a gap.
+        t = t.replace('|', ' ')
+        // Handwritten 4 is often read as '+' inside a number ("3+68500" -> 3468500).
+        t = t.replace(Regex("""(?<=\d)\+(?=\d{2})"""), "4")
         t = fixConfusables(t)
         // Drop OCR junk characters (after the digit fixes, which may use '|').
         t = t.replace(Regex("""[^a-z0-9+/\-.:#&'\n ]"""), " ")
@@ -93,6 +97,10 @@ object MpesaParser {
         val run = Regex("""(?<![\d])\d{1,4}(?:[ \-]\d{1,4})+(?![\d])""")
         return run.replace(text) { m ->
             val groups = m.value.split(' ', '-')
+            // Boxed digits ("2 0 1 4 3 6 1 1", "20 1 43 6 1 1"): many 1-2 digit pieces are one number.
+            if (groups.size >= 4 && groups.all { it.length <= 2 } && groups.sumOf { it.length } in 5..14) {
+                return@replace groups.joinToString("")
+            }
             // Find the longest prefix of groups whose joined length is 5..7.
             val joined = StringBuilder()
             var out: String? = null
@@ -133,9 +141,14 @@ object MpesaParser {
 
         // Account values (so they are not re-used as phones / tills)
         val accounts = ACCOUNT_RE.findAll(text).mapNotNull { m ->
-            val v = m.groupValues[1].trim('-')
+            // "40 0 7047 7" -> 40070477, but only for numbers: "o2 47" stays "o2" (a scrap).
+            val v = m.groupValues[1].trim('-').let { raw ->
+                val first = raw.substringBefore(' ')
+                if (raw.contains(' ') && first.all { it.isDigit() }) raw.replace(" ", "") else first
+            }
             val valueStart = m.groups[1]!!.range.first
-            if (v.isEmpty() || v in ACCOUNT_STOPWORDS) null
+            // Numeric accounts may be 3+ digits; anything with letters needs 4+ ("EE2" is a scrap).
+            if (v.length < 3 || (v.length < 4 && !v.all { it.isDigit() }) || v in ACCOUNT_STOPWORDS) null
             else if (nameSpans.any { valueStart in it }) null
             else if (v in nameWords && v.none { it.isDigit() }) null
             else Triple(m.range.first, m.groups[1]!!.range, v)
@@ -146,6 +159,20 @@ object MpesaParser {
 
         val hasPaybillKw = PAYBILL_KW.containsMatchIn(text)
 
+        /**
+         * Some signs print the label UNDER the value ("20252025 / ACCOUNT NUMBER / SAMPLE POSTER").
+         * If the account label is followed by words only but the line above it is a number, use that.
+         */
+        fun accountAbove(paybill: String): String? {
+            val lines = text.split("\n")
+            for (i in 1 until lines.size) {
+                if (!Regex("""\b(account|acc|a/c)\b""").containsMatchIn(lines[i])) continue
+                val above = lines[i - 1].trim()
+                if (Regex("""[a-z0-9\-]{4,24}""").matches(above) && above.any { it.isDigit() } && above != paybill) return above
+            }
+            return null
+        }
+
         // PAYBILL
         for (kw in PAYBILL_KW.findAll(text)) {
             val n = nearestNumber(business, kw.range, used, ::isAccountValue) ?: continue
@@ -153,7 +180,9 @@ object MpesaParser {
             val acc = accounts.firstOrNull { it.first >= n.end && it.first - n.end <= 60 }
                 ?: accounts.firstOrNull { it.first >= kw.range.last && it.first - kw.range.last <= 80 }
             acc?.let { used += it.second }
-            out += Candidate(PaymentType.PAYBILL, n.value, acc?.third?.let(::cleanAccount))
+            var account = acc?.third?.let(::cleanAccount)
+            if (account == null || account.none { it.isDigit() }) accountAbove(n.value)?.let { account = cleanAccount(it) }
+            out += Candidate(PaymentType.PAYBILL, n.value, account)
         }
 
         // TILL ("lipa na m-pesa" only counts when no paybill keyword exists)

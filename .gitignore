@@ -9,3 +9,6 @@
 .externalNativeBuild/
 .cxx/
 .kotlin/
+
+# Benchmark photos and answers (real names / numbers): kept local, not published
+/samples/

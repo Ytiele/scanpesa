@@ -73,6 +73,7 @@ fun ConfirmScreen(vm: AppViewModel, onBack: () -> Unit, onRescan: () -> Unit) {
     val d by vm.draft.collectAsState()
     val photo by vm.photo.collectAsState()
     val boxes by vm.highlight.collectAsState()
+    val unsure by vm.uncertain.collectAsState()
     var error by remember { mutableStateOf<String?>(null) }
     var askService by remember { mutableStateOf<GoResult.NeedsService?>(null) }
     val target = remember { vm.prefs.preferredTarget }
@@ -99,7 +100,14 @@ fun ConfirmScreen(vm: AppViewModel, onBack: () -> Unit, onRescan: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        ScreenTopBar(if (draft == null) "Nothing found" else "Ready to pay", onBack)
+        ScreenTopBar(
+            when {
+                draft != null -> "Ready to pay"
+                unsure -> "Not sure"
+                else -> "Nothing found"
+            },
+            onBack,
+        )
 
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Space.screen),
@@ -124,7 +132,8 @@ fun ConfirmScreen(vm: AppViewModel, onBack: () -> Unit, onRescan: () -> Unit) {
 
             if (draft == null) {
                 Text(
-                    "No Paybill, Till or phone number could be read. Move a little closer, make sure the numbers are sharp, and retake.",
+                    if (unsure) "The numbers on this photo couldn't be read reliably (different readings disagreed). Retake a little closer and straight-on so ScanPesa doesn't guess."
+                    else "No Paybill, Till or phone number could be read. Move a little closer, make sure the numbers are sharp, and retake.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
