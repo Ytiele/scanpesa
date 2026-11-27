@@ -217,8 +217,17 @@ To measure it on real photos:
 3. `python tools/bench.py -v` runs the app's real reader on every photo and prints, per photo,
    OK / SAFE (not sure, nothing found, or Paybill without account) / WRONG, plus the score.
 
-First run (34 web posters + phone photos, 2026-11-27): 22/33 correct with **9 wrong answers** ->
-now **24/33 correct, 9 safe misses, 0 wrong**.
+Tilted photos are straightened first: the typical angle of the text lines is measured, and the
+photo is read both rotated level (hand tilt) and de-slanted (sign seen from the side); all
+readings vote together. Accounts are only accepted when at least half of the readings agree,
+no reading saw a longer account (a dropped digit), and no stray character follows the number.
+
+| Set (2026-11-27) | Before | Now |
+|---|---|---|
+| 33 straight photos | 22 correct, **9 wrong** | **24 correct, 0 wrong** |
+| 84 tilted copies (+-10 deg, +20 deg, side view) | 39 correct, **4 wrong** | **58 correct, 0 wrong** |
+
+`python tools/bench.py --set tilt` runs the tilted set (`samples/tilt`, `samples/answers_tilt.csv`).
 
 ## Safety design
 

@@ -21,7 +21,7 @@ object MpesaParser {
     )
 
     private val PAYBILL_KW = Regex(
-        """pay\s*-?\s*b[il1|][l1|]{2}|business\s*(?:n[o0]\.?|number|num|#)|biz\s*(?:n[o0]|number)|\bp\.?b\b"""
+        """pa[yv]\s*-?\s*b[il1|]?[l1|]{1,2}|business\s*(?:n[o0]\.?|number|num|#)|biz\s*(?:n[o0]|number)|\bp\.?b\b"""
     )
     private val TILL_KW = Regex("""\bt[il1|][l1|]{2}\b|buy\s*goods""")
     private val LIPA_KW = Regex("""lipa\s*na\s*m\s*-?\s*pesa""")
@@ -151,13 +151,18 @@ object MpesaParser {
             if (v.length < 3 || (v.length < 4 && !v.all { it.isDigit() }) || v in ACCOUNT_STOPWORDS) null
             else if (nameSpans.any { valueStart in it }) null
             else if (v in nameWords && v.none { it.isDigit() }) null
+            // "73944 o": a lone stray character right after a numeric account is usually its last
+            // digit, misread. The account is incomplete -> treat it as unreadable.
+            else if (v.all { it.isDigit() } && Regex("""^ [0-9olisbzgqtd]( |$)""").containsMatchIn(
+                    text.substring(m.groups[1]!!.range.last + 1).substringBefore('\n'))) null
             else Triple(m.range.first, m.groups[1]!!.range, v)
         }.toList()
         val accountSpans = accounts.map { it.second }
 
         fun isAccountValue(n: Num) = accountSpans.any { n.start >= it.first && n.start <= it.last }
 
-        val hasPaybillKw = PAYBILL_KW.containsMatchIn(text)
+        // An "Account" label means Paybill (tills have no account), even if the Paybill label is garbled.
+        val hasPaybillKw = PAYBILL_KW.containsMatchIn(text) || accounts.isNotEmpty()
 
         /**
          * Some signs print the label UNDER the value ("20252025 / ACCOUNT NUMBER / SAMPLE POSTER").

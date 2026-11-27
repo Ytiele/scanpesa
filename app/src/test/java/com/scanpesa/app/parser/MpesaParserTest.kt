@@ -274,6 +274,11 @@ class MpesaParserTest {
         assertCandidate(c, PAYBILL, "247247", null)
     }
 
+    @Test fun real06_strayCharAfterAccountMeansIncomplete() {
+        val c = only("PAYBILL NUMBER\n542542\nACCOUNT NUMBER\n73944 o")
+        assertCandidate(c, PAYBILL, "542542", null)
+    }
+
     // ---------------------------------------------------------------- validator
 
     @Test fun validator_phoneForms() {

@@ -23,7 +23,7 @@ data class NumberToken(val value: String, val box: Box, val candidate: Candidate
  */
 object PhotoTokens {
 
-    private val PAYBILL_KW = Regex("""pay\s*-?\s*b[il1][l1]{2}|business\s*n|biz\s*n|\bp\.?b\b""")
+    private val PAYBILL_KW = Regex("""pa[yv]\s*-?\s*b[il1]?[l1]{1,2}|business\s*n|biz\s*n|\bp\.?b\b""")
     private val TILL_KW = Regex("""\bt[il1][l1]{2}\b|buy\s*goods""")
 
     /** Valid payment numbers: 5–7 digit paybill/till, or a Kenyan mobile number. */
@@ -134,6 +134,10 @@ object PhotoTokens {
         fun size(c: Candidate) = boxOf(c)?.let(::height) ?: 0f
 
         val business = candidates.filter { it.type == PaymentType.PAYBILL || it.type == PaymentType.TILL }
+        // A phone is only picked when nothing on the photo looks like a Paybill/Till number: a
+        // 5-7 digit number without a readable label may be a business whose label was garbled
+        // (and the phone just a contact/vendor number). Better to ask for a retake.
+        if (business.isEmpty() && tokens.any { !it.isAccount && it.value.length in 5..7 }) return null
         val chosen = business.maxByOrNull(::size)
             ?: candidates.filter { it.typeConfirmed }.maxByOrNull(::size) // Pochi / Send Money named on the sign
             ?: candidates.maxByOrNull(::size)

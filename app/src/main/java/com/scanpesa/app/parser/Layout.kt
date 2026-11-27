@@ -77,8 +77,21 @@ object Consensus {
             .sortedWith(compareByDescending<Map.Entry<String, List<String>>> { it.value.size }.thenByDescending { it.key.length })
         val accTop = accGroups.firstOrNull()?.value?.size ?: 0
         val accSecond = accGroups.getOrNull(1)?.value?.size ?: 0
-        // Readings disagree on the account: treat it as unreadable (Go stays off, user retakes).
-        val account = if (accSecond > 0 && accTop < 3 * accSecond) null else accGroups.firstOrNull()?.value?.first()
+        // The account must be seen the same way at least twice, and no reading may have seen an
+        // account of a different length (that reading dropped or added a digit somewhere).
+        // Otherwise it's unreadable: Go stays off and the user retakes.
+        // If any reading (also those that misread the business number) saw a LONGER account than the
+        // majority, the majority probably dropped a digit -> unreadable. Shorter scraps are ignored.
+        // Exception: a single stray longer reading (a doubled digit on boxed signs) is outvoted when
+        // at least 4 readings agree and outnumber the longer ones 4 to 1.
+        val majority = accGroups.firstOrNull()?.key
+        val longer = if (majority == null) 0 else valid.count { (it.candidate.account?.let(norm)?.length ?: 0) > majority.length }
+        val outvoted = longer == 0 || (accTop >= 4 && accTop >= 4 * longer)
+        // ...and the account must be backed by at least half of the readings that agree on the number
+        // (others may have seen it as incomplete, e.g. "73944 o").
+        val supported = accTop * 2 >= ofType.size
+        val account = if (majority == null || !outvoted || !supported || (accSecond > 0 && accTop < 3 * accSecond)) null
+        else accGroups.first().value.first()
         val best = ofType.firstOrNull { it.candidate.account == account } ?: ofType.first()
         return Decision(
             best.copy(candidate = best.candidate.copy(account = account)),

@@ -19,9 +19,10 @@ import java.io.File
 class AdbBenchActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val dir = File(filesDir, "bench")
+        val set = intent.getStringExtra("set") ?: "bench"
+        val dir = File(filesDir, set)
         val files = dir.listFiles()?.filter { it.isFile }?.sortedBy { it.name }.orEmpty()
-        val out = File(filesDir, "bench_results.jsonl").apply { writeText("") }
+        val out = File(filesDir, "${set}_results.jsonl").apply { writeText("") }
         Log.i(TAG, "benchmark: ${files.size} images")
         next(files, 0, out)
     }
@@ -51,6 +52,7 @@ class AdbBenchActivity : Activity() {
                 .put("account", pick?.candidate?.account ?: "")
                 .put("uncertain", scan?.decision?.uncertain ?: false)
                 .put("votes", "${scan?.decision?.votes ?: 0}/${scan?.decision?.readings ?: 0}")
+                .put("picks", scan?.picks?.joinToString(" | ") { it?.let { p -> "${p.candidate.type}:${p.candidate.number}:${p.candidate.account.orEmpty()}" } ?: "-" } ?: "")
                 .put("candidates", scan?.candidates?.joinToString(";") { "${it.type}:${it.number}:${it.account.orEmpty()}" } ?: "")
                 .put("text", scan?.text ?: "")
             out.appendText(o.toString() + "\n")

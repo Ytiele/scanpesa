@@ -16,8 +16,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ADB = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Android", "Sdk", "platform-tools", "adb.exe")
 if not os.path.exists(ADB):
     ADB = "adb"
-RESULTS = os.path.join(ROOT, "samples", "bench_results.jsonl")
-ANSWERS = os.path.join(ROOT, "samples", "answers.csv")
+# --set tilt  -> samples/answers_tilt.csv, phone folder files/tilt
+SET = sys.argv[sys.argv.index("--set") + 1] if "--set" in sys.argv else "bench"
+RESULTS = os.path.join(ROOT, "samples", f"{SET}_results.jsonl")
+ANSWERS = os.path.join(ROOT, "samples", "answers.csv" if SET == "bench" else f"answers_{SET}.csv")
 PKG = "com.scanpesa.app"
 
 
@@ -27,7 +29,7 @@ def adb(*args, **kw):
 
 def run_on_phone():
     adb("logcat", "-c")
-    adb("shell", "am", "start", "-n", f"{PKG}/.automation.AdbBenchActivity")
+    adb("shell", "am", "start", "-n", f"{PKG}/.automation.AdbBenchActivity", "--es", "set", SET)
     t0 = time.time()
     while time.time() - t0 < 600:
         time.sleep(2)
@@ -35,13 +37,13 @@ def run_on_phone():
             break
     else:
         sys.exit("benchmark did not finish in 10 minutes")
-    out = adb("exec-out", "run-as", PKG, "cat", "files/bench_results.jsonl")
+    out = adb("exec-out", "run-as", PKG, "cat", f"files/{SET}_results.jsonl")
     with open(RESULTS, "w", encoding="utf-8") as f:
         f.write(out.stdout)
 
 
 def score(verbose=False):
-    answers = {r["file"]: r for r in csv.DictReader(open(ANSWERS, encoding="utf-8"))}
+    answers = {r["file"]: r for r in csv.DictReader(open(ANSWERS, encoding="utf-8-sig"))}
     results = {}
     for line in open(RESULTS, encoding="utf-8"):
         if line.strip():
